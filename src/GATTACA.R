@@ -1,6 +1,6 @@
 # Header Info ----------------------------------------------------------------------------------------------------------
 #
-# GATTACA v0.5-alpha - General Algorithm for The Transcriptional Analysis by one-Channel Arrays
+# GATTACA v0.6-alpha - General Algorithm for The Transcriptional Analysis by one-Channel Arrays
 #
 # a FeAR R-script - 25-Mar-2021
 #
@@ -638,7 +638,7 @@ for (i in 1:m) {
   ffun1 = filterfun(f1)
   presenceIndx[,i] = genefilter(dataset[,which(design == i)], ffun1)
 }
-retained = cbind(colSums(presenceIndx)) # Cast to matrix
+retained = as.matrix(colSums(presenceIndx)) # Cast to matrix
 colnames(retained) = c("Retained_Genes")
 rownames(retained) = groups
 retained
@@ -1002,10 +1002,15 @@ for (i in 1:length(myContr)) {
   sub.dataset = dataset[,c(ctrl.index,case.index)]
   cl = c(rep(0,length(ctrl.index)), rep(1,length(case.index)))
   
+  # Single Origin
+  origin = rep(1,length(cl))
+  # Multiple origins
+  #origin = c(1,1,1,1,2,3,1,1,1,1,2,3,2,2) # For-looping would require a length(myContr)-long list... to be done
+  
   # invisible(capture.output()) is to suppress automatic output to console
   # WARNING: therein <- (instead of =) is mandatory for assignment!
-  invisible(capture.output(RP.out <- RankProducts(sub.dataset, cl, gene.names = rownames(dataset),
-                                                  logged = TRUE, na.rm = FALSE, plot = FALSE, rand = 123)))
+  invisible(capture.output(RP.out <- RP.advance(sub.dataset, cl, origin, gene.names = rownames(dataset),
+                                                logged = TRUE, na.rm = FALSE, plot = FALSE, rand = 123)))
   invisible(capture.output(plotRP(RP.out, cutoff = 0.05)))
   
   # Compute full DEG Tables (returns a list of 2 matrices, not data frames)
@@ -1094,13 +1099,18 @@ cbind(sampleName[case.index], sampleName[ctrl.index])
 paired.dataset = dataset[,case.index] - dataset[,ctrl.index]
 cl = rep(1,dim(paired.dataset)[2])
 
+# Single Origin
+origin = rep(1, length(paired.dataset))
+# Multiple origins
+#origin = c(1,1,1,1,2,2)
+
 # invisible(capture.output()) is to suppress automatic output to console
 # WARNING: therein <- (instead of =) is mandatory for assignment!
-invisible(capture.output(RP.out <- RankProducts(paired.dataset, cl, gene.names = rownames(dataset),
-                                                logged = TRUE, na.rm = FALSE, plot = FALSE, rand = 123)))
+invisible(capture.output(RP.out <- RP.advance(paired.dataset, cl, origin, gene.names = rownames(dataset),
+                                              logged = TRUE, na.rm = FALSE, plot = FALSE, rand = 123)))
 invisible(capture.output(plotRP(RP.out, cutoff = 0.05)))
 
-# Compute full DEG Tables (returns a list of 2 matrices, not data frames)
+# Compute full DEG Tables (it returns a list of 2 matrices, not data frames)
 invisible(capture.output(DEGs.RP <- topGene(RP.out, logged = TRUE, logbase = 2, num.gene = filtSize)))
 for (j in 1:2) {
   DEGs.RP[[j]][,3] = log2(DEGs.RP[[j]][,3]) # Take the log2 values
