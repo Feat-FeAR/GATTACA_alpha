@@ -1,8 +1,8 @@
 # Header Info ----------------------------------------------------------------------------------------------------------
 #
-# GATTACA v0.4-alpha - General Algorithm for The Transcription Analysis by one-Channel Arrays
+# GATTACA v0.5-alpha - General Algorithm for The Transcriptional Analysis by one-Channel Arrays
 #
-# a FeAR R-script - 25-Feb-2021
+# a FeAR R-script - 25-Mar-2021
 #
 # Pipeline for one-Color (HD) Microarrays
 # Data are supposed to be already background-subtracted, log2-transformed, and interarray-normalized
@@ -80,13 +80,27 @@ annot = annot[,c("Representative_Public_ID", "Gene_Symbol", "Gene_Title")]
 miss = sum(annot[,2] == "---")
 
 # Agilent-028005 SurePrint G3 Mouse GE 8x60K - local annotation database - [21865 missing GeneSymbols]
-setwd(paste(system.root, "Coding\\R scripts\\Annotations\\AllAnnotations - Agilent Update 2018", sep = ""))
+setwd(paste(system.root, "Coding\\R scripts\\Annotations\\Agilent-028005_SurePrintG3MouseGE8x60K", sep = ""))
 annot = read.xlsx("028005_D_AA_20181026.xlsx", colNames = TRUE, rowNames = TRUE, sep.names = "_") # As Data Frame
 #as.matrix(colnames(annot)) # List of the available annotations
 annot = annot[,c("GeneSymbol", "GeneName", "Description")]
 miss = sum(is.na(annot[,1]))
 
 # Agilent-026652 Whole Human Genome Microarray 4x44K v2
+# remote annotation database (chip HsAgilentDesign026652) - [6076 missing GeneSymbols]
+library(HsAgilentDesign026652.db)
+#HsAgilentDesign026652() # List of the available annotations
+annot = data.frame(Accession   = sapply(contents(HsAgilentDesign026652ACCNUM), paste, collapse = ", "),
+                   GeneSymbol  = sapply(contents(HsAgilentDesign026652SYMBOL), paste, collapse = ", "),
+                   Description = sapply(contents(HsAgilentDesign026652GENENAME), paste, collapse = ", "))
+miss = sum(annot[,2] == "NA")
+
+# Agilent-026652 Whole Human Genome Microarray 4x44K v2 - local annotation database - [7035 missing GeneSymbols]
+setwd(paste(system.root, "Coding\\R scripts\\Annotations\\Agilent-026652_WholeHumanGenome4x44Kv2", sep = ""))
+annot = read.xlsx("GPL13497_noParents.an.xlsx", colNames = TRUE, rowNames = TRUE, sep.names = "_") # As Data Frame
+as.matrix(colnames(annot)) # List of the available annotations
+annot = annot[,c("GeneSymbols", "GeneNames")]
+miss = sum(is.na(annot[,1]))
 
 cat("\n", miss, " unannotated genes (", round(miss/dim(annot)[1]*1e2, digits = 2), " %) \n\n", sep = "")
 
@@ -98,9 +112,9 @@ cat("\n", miss, " unannotated genes (", round(miss/dim(annot)[1]*1e2, digits = 2
 # User-Defined Experiment-Specific Variables
 
 myFolder = "D:\\Dropbox\\temp for today"
-myFolder = "D:\\Drive UniUPO\\WORKS\\202x - Article - Colon\\Data\\1 - Raw Data\\Exp 2017-10-27"
+myFolder = paste(system.root, "WORKS\\202x - Article - Colon\\Data\\1 - Raw Data", sep = "")
 myFile = "1 - log_Intensity_matrix_Organized_all.txt"
-myFile = "Quantile-normalized_logExpression_Agilent.txt"
+myFile = "Large Expression Matrix - PostNormJoin.txt"
 
 rowOffset = 1    # Row offset (rows to skip, including the header)
 colWithNames = 1 # Column containing (unique) gene identifiers
@@ -120,8 +134,12 @@ if (length(myColors) < length(groups)) {
 }
 
 # Filter: log2-expression conventional threshold (to be checked from case to case)
-thr0 = 6 # Agilent
-thr0 = 4 # Affymetrix
+# Agilent
+# Check the un-hybridized (-)3xSLv1 NegativeControl probe as a plausible value:
+# e.g. mean(as.numeric(dataset["(-)3xSLv1",])))
+thr0 = 6
+# Affymetrix
+thr0 = 4
 
 # Fold Change Threshold. Usually, |log2FC|>0.5 OR |log2FC|>1
 thrFC = 0.5
@@ -514,7 +532,7 @@ printPlots("6 - PCA")
 pairsplot(pcaOut, colby = "Group", colkey = colMAtch)
 printPlots("6 - PCA Pairs")
 
-# Possibly remove some 'batched' sample, by sample name, e.g.: toBeRemoved = c("TG_1","WT_2","TGFK_1","Ab_5")
+# Possibly remove some 'batched' samples, by sample name, e.g.: toBeRemoved = c("TG_1","WT_2","TGFK_1","Ab_5")
 toBeRemoved = c()
 if (length(toBeRemoved) > 0) {
   for (i in 1:length(toBeRemoved)) {
@@ -523,7 +541,7 @@ if (length(toBeRemoved) > 0) {
     design = design[-rem.Index]
     sampleName = sampleName[-rem.Index]
   }
-  cat("\n", length(toBeRemoved), " groups have been removed\n", sep = "")
+  cat("\n", length(toBeRemoved), " samples have been removed\n", sep = "")
   d = dim(dataset)
   cat("\nSub-dataset dimensions:", d, "\n\n", sep = " ")
   dataset[1:2,]
@@ -558,11 +576,12 @@ for (i in 1:m) {
 meansArr[,m+1] = rowMeans(unlogged.dataset, na.rm = TRUE)
 SDsArr[,m+1] = apply(unlogged.dataset, 1, sd, na.rm = TRUE)
 corrArr[m+1] = cor(meansArr[,m+1], SDsArr[,m+1])
+meansArr[is.nan(meansArr)] = NA # To convert NaN in NA when some of the original groups are actually missing
 
 # Scatter plot
 par(mfrow = c(1, m+1)) # Optional, for sub-plotting
-X.max = max(meansArr)
-Y.max = max(SDsArr)
+X.max = max(meansArr, na.rm = TRUE)
+Y.max = max(SDsArr, na.rm = TRUE)
 for (i in 1:(m+1)) {
   
   plot(meansArr[,i], SDsArr[,i],
@@ -599,17 +618,23 @@ kSize = ceiling(grSize * kFac) # 'ceiling' to be more stringent than 'round'
 filTable = cbind(grSize, grSize*kFac, kSize, round(100*(kSize/grSize), 1)) # Cast to matrix
 colnames(filTable) = c("Group_Size", "Min_Presence", "Rounded", "Actual %")
 rownames(filTable) = groups
-cat("\nMinimum gene presence per group = ", kFac*100, "% of the samples\n\n", sep = "")
+mgppg = paste("\nMinimum gene presence per group = ", kFac*100, "% of the samples\n\n", sep = "")
+cat(mgppg)
 filTable
 if (saveOut) {
-  write.table(filTable, "Filtering Table.txt", sep = "\t", col.names = TRUE, row.names = TRUE, quote = FALSE)
-  cat("\n'Filtering Table.txt' has been saved in", myFolder, "\n\n")
+  write(paste("Filtering Summary File\n",
+              "======================", sep = ""), "Filtering Report.txt")
+  write(paste("\nPresence threshold thr0 = ", thr0, sep = ""), "Filtering Report.txt", append = TRUE)
+  write(mgppg, "Filtering Report.txt", append = TRUE)
+  suppressWarnings(write.table(filTable, "Filtering Report.txt", sep = "\t", append = TRUE,
+                               col.names = TRUE, row.names = TRUE, quote = FALSE))
+  cat("\n'Filtering Report.txt' has been saved in", myFolder, "\n\n")
 }
 
 # Above thr0 value in at least kSize samples out of grSize (kFac*100 % - Default=80%)...
 presenceIndx = matrix(nrow = d[1], ncol = m) # Store values using matrices
 for (i in 1:m) {
-  f1 = kOverA(kSize, thr0)
+  f1 = kOverA(kSize[i], thr0)
   ffun1 = filterfun(f1)
   presenceIndx[,i] = genefilter(dataset[,which(design == i)], ffun1)
 }
@@ -617,17 +642,26 @@ retained = cbind(colSums(presenceIndx)) # Cast to matrix
 colnames(retained) = c("Retained_Genes")
 rownames(retained) = groups
 retained
+if (saveOut) {
+  write("\n", "Filtering Report.txt", append = TRUE)
+  suppressWarnings(write.table(retained, "Filtering Report.txt", append = TRUE,
+                               sep = "\t", col.names = TRUE, row.names = TRUE, quote = FALSE))
+}
 
 #...in at least 1 group (row-wise logical OR)
 unionSet = (rowSums(presenceIndx) > 0)
 
 filtSize = sum(unionSet)
-cat("\nFiltering Report:\n",
-    "-----------------\n",
-    "  ", d[1] - filtSize, " genes have been filtered out (",
-    round(((d[1] - filtSize)/d[1])*1e2, digits = 2), "%)\n",
-    "  ", filtSize, " retained genes out of ", d[1], " (",
-    round((filtSize/d[1])*1e2, digits = 2), "%)\n\n", sep = "")
+report = paste("\nFiltering Report:\n",
+               "-----------------\n",
+               "  ", d[1] - filtSize, " genes have been filtered out (",
+               round(((d[1] - filtSize)/d[1])*1e2, digits = 2), "%)\n",
+               "  ", filtSize, " retained genes out of ", d[1], " (",
+               round((filtSize/d[1])*1e2, digits = 2), "%)\n\n", sep = "")
+cat(report)
+if (saveOut) {
+  write(paste("\n", report, sep = ""), "Filtering Report.txt", append = TRUE)
+}
 
 dataset = dataset[which(unionSet),]
 
@@ -648,12 +682,11 @@ for (i in 1:(m-1)) { # All the possible combinations of two groups
   }
 }
 
-myContr = cbind(myContr) # Cast to matrix
+myContr = as.matrix(myContr) # Cast to matrix
 rownames(myContr) = c(1:length(myContr))
 myContr
 # Modify here to retain (and reorder) just the contrasts of interest
-myContr = myContr[c(3,6,1,2)]
-myContr = cbind(myContr)
+myContr = as.matrix(myContr[c(3,6,1,2),])
 rownames(myContr) = c(1:length(myContr))
 myContr
 
@@ -747,30 +780,47 @@ for (i in 1:length(myContr)) {
 
 
 
-# DE by Limma - Paired -------------------------------------------------------------------------------------------------
-# Differential Expression Assessment in Paired-Sample Design (just for two groups)
+# ~ DE by Limma - Paired -------------------------------------------------------------------------------------------------
+# Differential Expression Assessment in Paired-Sample Design (for two-group comparison only)
 
-patient.ID = factor(c(1:35,1:35))
+# Reduce dataset to the sole two groups to be compared by paired test
+if (length(myContr) > 1) {
+  stop("Too many contrasts loaded - Paired test is for two-group comparison only!\n\n")
+}
+pg = strsplit(myContr, "-", fixed = TRUE) # List of the two groups to pair
+index = which(grepl(pg[[1]][1], sampleName) | grepl(pg[[1]][2], sampleName))
+dataset = dataset[,index]
+design = design[index]
+sampleName = sampleName[index]
+d = dim(dataset)
+cat("\nSub-dataset dimensions:", d, "\n\n", sep = " ")
+dataset[1:2,]
+
+# Define pairing based on sampleName
+patient.ID = factor(as.numeric(substring(sampleName, regexpr("_", sampleName) + 1))) # Always to be checked !!
+#patient.ID = factor(c(1,1,2,2,3,3,4,5,6,4,5,6)) # ...or go manually
 cond = factor(groups[design])
 
 limmaDesign = model.matrix(~patient.ID + cond)
+limmaDesign
 
 fit = lmFit(dataset, limmaDesign)
 efit2 = eBayes(fit)
 
 # Print Results (Top-Ten genes)
-cat("\nDEG Top-List for contrast: ", myContr[1], "\n", sep = "")
-topTable(efit2, coef = "condPDAC", adjust.method = "BH", sort.by = "B") # just on-Screen
+coeff = tail(colnames(limmaDesign), n = 1) # Return the last element of the vector
+cat("\nDEG Top-List for contrast: ", myContr, " (design column: ", coeff, ")\n", sep = "")
+topTable(efit2, coef = coeff, adjust.method = "BH", sort.by = "B") # just on-Screen
 
 # Compute full DEG Tables
 DEGs.limma = list() # Create an empty list (for compatibility with independent-sample test)
-DEGs.limma[[1]] = topTable(efit2, coef = "condPDAC", number = filtSize,
+DEGs.limma[[1]] = topTable(efit2, coef = coeff, number = filtSize,
                            adjust.method = "BH", sort.by = "B") # list of Data Frames
 DEGs.limma[[1]] = appendAnnotation(DEGs.limma[[1]], annot, sort.by = "adj.P.Val")
 
 # Save full DEG Tables
 if (saveOut) {
-  degTabName = paste("Limma - DEG Table ", myContr[1], " - Paired.txt", sep = "")
+  degTabName = paste("Limma - DEG Table ", myContr, " - Paired.txt", sep = "")
   write.table(DEGs.limma[[1]], degTabName, sep = "\t", col.names = TRUE, row.names = TRUE, quote = FALSE)
   cat("\n'", degTabName, "' has been saved in ", myFolder, "\n\n", sep = "")
 }
@@ -795,14 +845,14 @@ hyp
 
 # Save significant DEG list in Excel format with annotations
 all.limma.sigs = list() # Create an empty list
-all.limma.sigs[[1]] = topTable(efit2, coef = "condPDAC", number = filtSize,
+all.limma.sigs[[1]] = topTable(efit2, coef = coeff, number = filtSize,
                                adjust.method = "BH", sort.by = "B",
                                p.value = 0.05, lfc = thrFC) # list of Data Frames
 
 if (saveOut & dim(all.limma.sigs[[1]])[1] > 0) {
   all.limma.sigs[[1]] = appendAnnotation(all.limma.sigs[[1]], annot, sort.by = "adj.P.Val")
-  write.xlsx(all.limma.sigs[[1]], paste("Significant Genes by limma - ", myContr[1], " - Paired.xlsx", sep = ""),
-             colNames = TRUE, rowNames = TRUE, sheetName = myContr[1],
+  write.xlsx(all.limma.sigs[[1]], paste("Significant Genes by limma - ", myContr, " - Paired.xlsx", sep = ""),
+             colNames = TRUE, rowNames = TRUE, sheetName = myContr,
              keepNA = TRUE, firstRow = TRUE) # Freezes the first row!
 }
 
@@ -984,7 +1034,7 @@ for (i in 1:length(myContr)) {
   ups.Index = which(DEGs.RP$Table1[,4] < 0.05 & DEGs.RP$Table1[,3] > thrFC)
   dwn.Index = which(DEGs.RP$Table2[,4] < 0.05 & DEGs.RP$Table2[,3] < -thrFC)
   
-  # Here 'results.RP' is created in analogy to 'results.limma': (-1,0,+1) for (Down, NotSig, Up)-regulated genes
+  # Here 'results.RP' is filled in analogy to 'results.limma': (-1,0,+1) for (Down, NotSig, Up)-regulated genes
   # Accessing matrix rows by row name: matrix[rowname, col_i]
   results.RP[rownames(DEGs.RP$Table1)[ups.Index],i] = 1
   results.RP[rownames(DEGs.RP$Table2)[dwn.Index],i] = -1
@@ -997,6 +1047,97 @@ for (i in 1:length(myContr)) {
                colNames = TRUE, rowNames = TRUE, sheetName = myContr[i],
                keepNA = TRUE, firstRow = TRUE) # Freezes the first row!
   }
+}
+
+summary.RP = rbind(colSums(results.RP == -1), # Cast to matrix
+                   colSums(results.RP == 0),
+                   colSums(results.RP == 1))
+rownames(summary.RP) = c("Down", "NotSig", "Up")
+summary.RP
+
+
+
+
+
+# ~ DE by RP - Paired --------------------------------------------------------------------------------------------------
+# One-class Analysis of the Paired (log)-Differences
+
+# Reduce dataset to the sole two groups to be compared by paired test
+if (length(myContr) > 1) {
+  stop("Too many contrasts loaded - Paired test is for two-group comparison only!\n\n")
+}
+pg = strsplit(myContr, "-", fixed = TRUE) # List of the two groups to pair
+index = which(grepl(pg[[1]][1], sampleName) | grepl(pg[[1]][2], sampleName))
+dataset = dataset[,index]
+design = design[index]
+sampleName = sampleName[index]
+d = dim(dataset)
+cat("\nSub-dataset dimensions:", d, "\n\n", sep = " ")
+dataset[1:2,]
+
+# Prepare Results matrix
+results.RP = matrix(data = 0, nrow = filtSize, ncol = 1)
+rownames(results.RP) = rownames(dataset)
+colnames(results.RP) = myContr
+
+# Define pairing based on sampleName
+case.index = which(grepl(pg[[1]][1], sampleName))
+ctrl.index = which(grepl(pg[[1]][2], sampleName))
+# ...or go manually
+#case.index = c(1,2,3,5,7)
+#ctrl.index = c(8,9,10,4,6)
+
+# Check the re-ordering before pairing
+cbind(sampleName[case.index], sampleName[ctrl.index])
+
+# Pair Samples
+paired.dataset = dataset[,case.index] - dataset[,ctrl.index]
+cl = rep(1,dim(paired.dataset)[2])
+
+# invisible(capture.output()) is to suppress automatic output to console
+# WARNING: therein <- (instead of =) is mandatory for assignment!
+invisible(capture.output(RP.out <- RankProducts(paired.dataset, cl, gene.names = rownames(dataset),
+                                                logged = TRUE, na.rm = FALSE, plot = FALSE, rand = 123)))
+invisible(capture.output(plotRP(RP.out, cutoff = 0.05)))
+
+# Compute full DEG Tables (returns a list of 2 matrices, not data frames)
+invisible(capture.output(DEGs.RP <- topGene(RP.out, logged = TRUE, logbase = 2, num.gene = filtSize)))
+for (j in 1:2) {
+  DEGs.RP[[j]][,3] = log2(DEGs.RP[[j]][,3]) # Take the log2 values
+  colnames(DEGs.RP[[j]])[3] = "Log2FC" # Correct column name
+}
+
+# Print Results (Top-Ten genes) for the contrast of interest
+cat("\nDEG Top-List for paired contrast: ", myContr, "\n", sep = "")
+tops = rbind(DEGs.RP$Table1[1:10,], DEGs.RP$Table2[1:10,])
+tops = tops[order(tops[,4])[1:10],] # Sort by PFP (~FDR) and take just the 'absolute' Top-Ten
+print(tops) # just on-Screen
+
+# Save full DEG Tables
+if (saveOut) {
+  upDegTabName = paste("RP_Up - DEG Table ", myContr, ".txt", sep = "")
+  dwnDegTabName = paste("RP_Down - DEG Table ", myContr, ".txt", sep = "")
+  write.table(DEGs.RP[[1]], upDegTabName, sep = "\t", col.names = TRUE, row.names = TRUE, quote = FALSE)
+  write.table(DEGs.RP[[2]], dwnDegTabName, sep = "\t", col.names = TRUE, row.names = TRUE, quote = FALSE)
+  cat("\n'", upDegTabName, "' and '", dwnDegTabName, "' \nhave been saved in ", myFolder, "\n\n", sep = "")
+}
+
+# Fetch indexes of significant DEGs
+dwn.Index = which(DEGs.RP$Table1[,4] < 0.05 & DEGs.RP$Table1[,3] < -thrFC)
+ups.Index = which(DEGs.RP$Table2[,4] < 0.05 & DEGs.RP$Table2[,3] > thrFC)
+
+# Here 'results.RP' is filled in analogy to 'results.limma': (-1,0,+1) for (Down, NotSig, Up)-regulated genes
+# Accessing matrix rows by row name: matrix[rowname, col_i]
+results.RP[rownames(DEGs.RP$Table1)[dwn.Index],1] = -1
+results.RP[rownames(DEGs.RP$Table2)[ups.Index],1] = 1
+
+# Save significant DEG list in Excel format with annotations
+if (saveOut & (length(ups.Index) > 1 | length(dwn.Index) > 1)) {
+  all.RP.sigs = rbind(DEGs.RP$Table1[dwn.Index,], DEGs.RP$Table2[ups.Index,]) # To join two objects vertically
+  all.RP.sigs = appendAnnotation(all.RP.sigs, annot, sort.by = "pfp")
+  write.xlsx(all.RP.sigs, paste("Significant Genes by RP - ", myContr, ".xlsx", sep = ""),
+             colNames = TRUE, rowNames = TRUE, sheetName = myContr,
+             keepNA = TRUE, firstRow = TRUE) # Freezes the first row!
 }
 
 summary.RP = rbind(colSums(results.RP == -1), # Cast to matrix
@@ -1028,6 +1169,9 @@ dub.DEGs.RP = cbind(probe.IDs, dub.DEGs.RP) # Reinsert Probe IDs as a standard e
 uni.DEGs.RP = dub.DEGs.RP[with(dub.DEGs.RP, ave(P.value, probe.IDs, FUN = min) == P.value),]
 # ...that is a more readable short expression for the extended:
 # uni.DEGs.RP = dub.DEGs.RP[ave(dub.DEGs.RP$P.value, dub.DEGs.RP$probe.IDs, FUN = min) == dub.DEGs.RP$P.value,]
+
+# Second round, in case of replicate probe.IDs with the same P.value
+uni.DEGs.RP = uni.DEGs.RP[with(uni.DEGs.RP, ave(pfp, probe.IDs, FUN = min) == pfp),]
 
 # Check for duplicates
 sum(duplicated(dub.DEGs.RP$probe.IDs)) # It must be dim(DEGs.RP[[i]])[1]
