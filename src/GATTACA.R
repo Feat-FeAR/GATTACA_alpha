@@ -1,8 +1,8 @@
 # Header Info ----------------------------------------------------------------------------------------------------------
 #
-# GATTACA v0.3-alpha - General Algorithm for The Transcription Analysis by one-Channel Arrays
+# GATTACA v0.4-alpha - General Algorithm for The Transcription Analysis by one-Channel Arrays
 #
-# a FeAR R-script - 11-Feb-2021
+# a FeAR R-script - 25-Feb-2021
 #
 # Pipeline for one-Color (HD) Microarrays
 # Data are supposed to be already background-subtracted, log2-transformed, and interarray-normalized
@@ -86,6 +86,8 @@ annot = read.xlsx("028005_D_AA_20181026.xlsx", colNames = TRUE, rowNames = TRUE,
 annot = annot[,c("GeneSymbol", "GeneName", "Description")]
 miss = sum(is.na(annot[,1]))
 
+# Agilent-026652 Whole Human Genome Microarray 4x44K v2
+
 cat("\n", miss, " unannotated genes (", round(miss/dim(annot)[1]*1e2, digits = 2), " %) \n\n", sep = "")
 
 
@@ -96,13 +98,15 @@ cat("\n", miss, " unannotated genes (", round(miss/dim(annot)[1]*1e2, digits = 2
 # User-Defined Experiment-Specific Variables
 
 myFolder = "D:\\Dropbox\\temp for today"
+myFolder = "D:\\Drive UniUPO\\WORKS\\202x - Article - Colon\\Data\\1 - Raw Data\\Exp 2017-10-27"
 myFile = "1 - log_Intensity_matrix_Organized_all.txt"
+myFile = "Quantile-normalized_logExpression_Agilent.txt"
 
 rowOffset = 1    # Row offset (rows to skip, including the header)
 colWithNames = 1 # Column containing (unique) gene identifiers
 colOffset = 1    # Column offset (columns to skip, including row names)
 
-groups = c("WT","Ab","AbFK","TG","TGFK") # Experimental Design - Group Names
+groups = c("WT","Ab","AbFK","TG","TGFK") # Experimental Design - Group Names (start with control condition)
 design = c(5,5,5,5,4) # Experimental Design - Ordered Group Size (compact Design Mode)
 
 # ...or build a custom Experimental Design vector (Full Design Mode)
