@@ -1,8 +1,8 @@
 # Header Info ----------------------------------------------------------------------------------------------------------
 #
-# GATTACA v0.1-alpha - General Algorithm for The Transcription Analysis by one-Channel Arrays
+# GATTACA v0.2-alpha - General Algorithm for The Transcription Analysis by one-Channel Arrays
 #
-# a FeAR R-script - 13-Nov-2020
+# a FeAR R-script - 01-Feb-2021
 #
 # Pipeline for one-Color (HD) Microarrays
 # Data are supposed to be already background-subtracted, log2-transformed, and interarray-normalized
@@ -14,14 +14,16 @@
 
 # * Package Loading ----------------------------------------------------------------------------------------------------
 
-library(preprocessCore) # For Quantile-Quantile Normalization
-library(rafalib)        # For Bland Altman Plot (aka MA Plot) 
-library(PCAtools)       # Principal Component Analysis
-library(genefilter)     # Expression Gene Filtering
-library(limma)          # Empirical Bayes Method for Differential Expression 
-library(RankProd)       # Rank Product Method for Differential Expression
-library(VennDiagram)    # Generate Venn Diagrams
-library(openxlsx)       # Read, Write, and Edit .xlsx (Excel) Files
+library(preprocessCore)   # Interarray Normalization by Quantile-Quantile Algorithm
+library(rafalib)          # Bland Altman Plots (aka MA Plots)
+library(PCAtools)         # Principal Component Analysis
+library(genefilter)       # Expression Gene Filtering
+library(limma)            # Empirical Bayes Method for Differential Expression
+library(RankProd)         # Rank Product Method for Differential Expression
+library(VennDiagram)      # Venn Diagrams
+library(openxlsx)         # Reading, Writing, and Editing of .xlsx (Excel) Files
+library(EnhancedVolcano)  # Volcano Plots
+library(ggplot2)          # Box Plot and Bar Chart with Jitter (already loaded by PCAtools)
 
 
 
@@ -32,37 +34,59 @@ library(openxlsx)       # Read, Write, and Edit .xlsx (Excel) Files
 system.root = "D:\\UniUPO Drive\\" # SilverLife @ Home
 system.root = "D:\\Drive UniUPO\\" # SkyLake2   @ DBIOS
 
-# Affymetrix Human Genome U133 Set (A) annotation data (chip hgu133a)
-library(hgu133a.db) 
+# Affymetrix Human Genome U133 Set (A) remote annotation database (chip hgu133a) - [2475 missing GeneSymbols]
+library(hgu133a.db)
 #hgu133a() # List of the available annotations
 annot = data.frame(Accession   = sapply(contents(hgu133aACCNUM), paste, collapse = ", "),
                    GeneSymbol  = sapply(contents(hgu133aSYMBOL), paste, collapse = ", "),
                    Description = sapply(contents(hgu133aGENENAME), paste, collapse = ", "))
+miss = sum(annot[,2] == "NA")
 
-# Affymetrix Human Genome U133 Set (A) Local Annotation File
+# Affymetrix Human Genome U133 Set (A) local annotation database - [1228 missing GeneSymbols]
 setwd(paste(system.root, "Coding\\R scripts\\Annotations\\HG-U133A-na36-annot-csv", sep = ""))
 annot = read.xlsx("HG-U133A.na36.annot.xlsx", colNames = TRUE, rowNames = TRUE, sep.names = "_") # As Data Frame
 #as.matrix(colnames(annot)) # List of the available annotations
 annot = annot[,c("Representative_Public_ID", "Gene_Symbol", "Gene_Title")]
+miss = sum(annot[,2] == "---")
 
-# Affymetrix Human Genome U133 Set (B) annotation data (chip hgu133b)
+# Affymetrix Human Genome U133 Set (B) remote annotation database (chip hgu133b) - [7176 missing GeneSymbols]
 library(hgu133b.db)
 #hgu133b() # List of the available annotations
 annot = data.frame(Accession   = sapply(contents(hgu133bACCNUM), paste, collapse = ", "),
                    GeneSymbol  = sapply(contents(hgu133bSYMBOL), paste, collapse = ", "),
                    Description = sapply(contents(hgu133bGENENAME), paste, collapse = ", "))
+miss = sum(annot[,2] == "NA")
 
-# Affymetrix Human Genome U133 Set (B) Local Annotation File
+# Affymetrix Human Genome U133 Set (B) local annotation database - [5875 missing GeneSymbols]
 setwd(paste(system.root, "Coding\\R scripts\\Annotations\\HG-U133B-na36-annot-csv", sep = ""))
 annot = read.xlsx("HG-U133B.na36.annot.xlsx", colNames = TRUE, rowNames = TRUE, sep.names = "_") # As Data Frame
 #as.matrix(colnames(annot)) # List of the available annotations
 annot = annot[,c("Representative_Public_ID", "Gene_Symbol", "Gene_Title")]
+miss = sum(annot[,2] == "---")
 
-# Agilent SurePrint G3 Mouse GE 8x60K Local Annotation File
+# Affymetrix HG-U133 Plus 2.0 Array remote annotation database (chip hgu133plus2) - [12,770 missing GeneSymbols]
+library(hgu133plus2.db)
+#hgu133plus2() # List of the available annotations
+annot = data.frame(Accession   = sapply(contents(hgu133plus2ACCNUM), paste, collapse = ", "),
+                   GeneSymbol  = sapply(contents(hgu133plus2SYMBOL), paste, collapse = ", "),
+                   Description = sapply(contents(hgu133plus2GENENAME), paste, collapse = ", "))
+miss = sum(annot[,2] == "NA")
+
+# Affymetrix HG-U133 Plus 2.0 Array local annotation database - [9619 missing GeneSymbols]
+setwd(paste(system.root, "Coding\\R scripts\\Annotations\\HG-U133_Plus_2-na36-annot-csv", sep = ""))
+annot = read.xlsx("HG-U133_Plus_2.na36.annot.xlsx", colNames = TRUE, rowNames = TRUE, sep.names = "_") # As Data Frame
+#as.matrix(colnames(annot)) # List of the available annotations
+annot = annot[,c("Representative_Public_ID", "Gene_Symbol", "Gene_Title")]
+miss = sum(annot[,2] == "---")
+
+# Agilent SurePrint G3 Mouse GE 8x60K local annotation database - [21865 missing GeneSymbols]
 setwd(paste(system.root, "Coding\\R scripts\\Annotations\\AllAnnotations - Agilent Update 2018", sep = ""))
 annot = read.xlsx("028005_D_AA_20181026.xlsx", colNames = TRUE, rowNames = TRUE, sep.names = "_") # As Data Frame
 #as.matrix(colnames(annot)) # List of the available annotations
 annot = annot[,c("GeneSymbol", "GeneName", "Description")]
+miss = sum(is.na(annot[,1]))
+
+cat("\n", miss, " unannotated genes (", round(miss/dim(annot)[1]*1e2, digits = 2), " %) \n\n", sep = "")
 
 
 
@@ -71,7 +95,6 @@ annot = annot[,c("GeneSymbol", "GeneName", "Description")]
 # * Variable Definition ------------------------------------------------------------------------------------------------
 # User-Defined Experiment-Specific Variables
 
-myFolder = "C:\\Users\\aleph\\Desktop"
 myFolder = "D:\\Dropbox\\temp for today"
 myFile = "1 - log_Intensity_matrix_Organized_all.txt"
 
@@ -106,6 +129,13 @@ secondNorm = FALSE
 save.PNG.plot = TRUE
 save.PDF.plot = FALSE
 append.annot = TRUE
+if (append.annot) {
+  dim.annot = dim(annot) # If 'annot' is not defined an error message will be displayed
+  cat("\nA ", dim.annot[1], " x ", dim.annot[2], " annotation dataframe has been loaded\n\n", sep = "")
+} else {
+  annot = NULL
+  cat("\nNo annotation loaded\n\n", sep = "")
+}
 
 
 
@@ -114,7 +144,10 @@ append.annot = TRUE
 # * Function Definition ------------------------------------------------------------------------------------------------
 # User-Defined Functions
 
-# Save Graphical Output to 'GATTACA Figures' Sub-directory
+# Save a graphical output to 'GATTACA Figures' sub-directory
+#   figureName  = output file name (without extension)
+#   PNG.bool    = T to print the currently displayed figure in PNG format
+#   PDF.bool    = T to print the currently displayed figure in PDF format
 printPlots = function(figureName, PNG.bool = save.PNG.plot, PDF.bool = save.PDF.plot)
 {
   figSubFolder = "GATTACA Figures"
@@ -131,6 +164,112 @@ printPlots = function(figureName, PNG.bool = save.PNG.plot, PDF.bool = save.PDF.
   if (PDF.bool) {
     invisible(capture.output(
       dev.print(device = pdf, paste(fullName, ".pdf", sep = ""))))
+  }
+}
+
+# Append annotation to DEG statistics top-table (do nothing if append.annot = FALSE)
+#   gene.stat   = the table of genes, usually a DEG summary-statistics top-table (or an expression matrix)
+#   ann         = the matrix containing the annotation data
+#   do.the.job  = F to skip the appending task within a script
+#   sort.by     = the name or index of the column used to sort the final data set
+appendAnnotation = function(gene.stat, ann, do.the.job = append.annot, sort.by = 1)
+{
+  if (do.the.job) {
+    # 'merge' function to merge two matrix-like objects horizontally and cast to data frame (right outer join)
+    # NOTICE: both gene.stat and ann are supposed to have the Probe_IDs as rownames
+    joined = merge(ann, gene.stat, by.x = "row.names", by.y = "row.names", all.y = TRUE)
+    rownames(joined) = joined[,1]
+    gene.stat = joined[,-1]
+  }
+  
+  # Re-sort the data frame by the content of 'sort.by' column ('sort.by' can be either a number or a column name)
+  gene.stat = gene.stat[order(gene.stat[,sort.by]),]
+    
+  return(gene.stat)
+}
+
+# Return basics descriptive statistics of a single gene, by group label
+#   gene  = Numeric vector or single-row data frame from gene expression matrix
+#   gr    = Group names
+#   des   = Experimental design (full design mode vector)
+descStat1G = function(gene, gr, des)
+{
+  # Define a new empty data frame
+  stat.frame = data.frame(GROUP = character(),
+                          n = integer(),
+                          MEAN = double(),
+                          VAR = double(),
+                          SD = double(),
+                          SEM = double(),
+                          stringsAsFactors = FALSE)
+  
+  for (i in 1:length(gr)) {
+    
+    n.gene = as.numeric(gene[des == i]) # Downcast to numeric vector
+    
+    stat.frame[i,1] = gr[i]
+    stat.frame[i,2] = sum(des == i)
+    stat.frame[i,3] = mean(n.gene)
+    stat.frame[i,4] = var(n.gene)
+    stat.frame[i,5] = sd(n.gene)
+    stat.frame[i,6] = sd(n.gene)/sqrt(sum(des == i)) # SEM
+  }
+  
+  return(stat.frame)
+}
+
+# Plot single gene comparison chart
+#   exp.mat     = Expression matrix (as data frame)
+#   gr          = Group names
+#   des         = Experimental design (full design mode vector)
+#   gois        = Genes of interest by probe (char vector)
+#   chart.type  = "BP" (Box Plot), "BC" (Bar Chart), or "MS" (Mean & SEM)
+singleGeneView = function(exp.mat, gr, des, gois, chart.type = "BP")
+{
+  geo = switch(chart.type,
+               "BP" = "point",
+               "BC" = "bar",
+               "MS" = "crossbar")
+  
+  for (i in 1:length(gois)) {
+    
+    var.expr = as.numeric(exp.mat[gois[i],]) # Downcast to vector
+    var.groups = gr[des]
+    sgex = data.frame(var.expr, var.groups) # Single Gene Expression Data Frame
+    sgs = descStat1G(exp.mat[gois[i],], gr, des) # Single Gene Summary Data Frame
+    
+    if (chart.type == "BP") {
+      
+      print( # NOTICE: When in a for loop, you have to explicitly print your resulting ggplot object
+        ggplot(data = sgex, aes(var.groups, var.expr)) +
+          theme_bw(base_size = 15, base_rect_size = 1.5) +
+          xlab("Group") + # In the following functions, when data=NULL (default), the data is inherited from ggplot()
+          ylab("log2 Expression") +
+          ggtitle(label = "Box Plot with Jitter", subtitle = paste("Probe ID: ", gois[i], sep = "")) +
+          geom_boxplot(width = 0.5, size = 0.5, notch = TRUE, outlier.shape = NA) +
+          stat_summary(fun = "mean", geom = geo, color = "red3", size = 2) +
+          geom_jitter(position = position_jitter(width = 0.1, height = 0, seed = 123), size = 1.5))
+      
+    } else if (chart.type == "BC" | chart.type == "MS") {
+      
+      print(
+        ggplot(data = sgex, aes(var.groups, var.expr)) +
+          theme_bw(base_size = 15, base_rect_size = 1.5) +
+          xlab("Group") +
+          ylab("log2 Expression") +
+          ggtitle(label = "Box Plot with Jitter", subtitle = paste("Probe ID: ", gois[i], sep = "")) +
+          stat_summary(fun = "mean", geom = geo, color = "black", size = 0.5, width = 0.2) +
+          # Recommended alternative for bar charts in ggplot2:
+          #geom_bar(data = sgs, aes(GROUP, MEAN), stat = "identity", color = "black", size = 0.5, width = 0.2) +
+          geom_errorbar(data = sgs, aes(GROUP, MEAN, ymin = MEAN - SEM, ymax = MEAN + SEM), size = 1, width = 0.1) + 
+          geom_jitter(position = position_jitter(width = 0.1, height = 0, seed = 123), size = 1.5))
+      
+    } else {
+      
+      cat("\n")
+      stop("Invalid chart.type!\n\n")
+      
+    }
   }
 }
 
@@ -324,7 +463,8 @@ for (i in 1:(m-1)) { # All the possible combinations of two groups
 # Clustering -----------------------------------------------------------------------------------------------------------
 # Sample-wise Hierarchical Clustering for Batch-Effect Detection
 
-sampleDist = dist(t(dataset), method = "euclidean") # distance matrix: compute the distances between the ROWS of a matrix
+# Matrix Transpose t() is used because dist() computes the distances between the ROWS of a matrix
+sampleDist = dist(t(dataset), method = "euclidean") # Distance matrix (NOTE: t(dataset) is coerced to matrix)
 hc = hclust(sampleDist, method = "ward.D")
 plot(hc) # Display Dendrogram
 printPlots("4 - Dendrogram")
@@ -384,6 +524,9 @@ if (length(toBeRemoved) > 0) {
   cat("\nSub-dataset dimensions:", d, "\n\n", sep = " ")
   dataset[1:2,]
 }
+
+# NOTE - NOTE - NOTE - NOTE - NOTE - NOTE - NOTE - NOTE - NOTE - NOTE - NOTE - NOTE
+# You can rerun this section to get the PC representation without the batched samples
 
 
 
@@ -546,6 +689,7 @@ DEGs.limma = list() # Create an empty list
 for (i in 1:length(myContr)) {
   DEGs.limma[[i]] = topTable(efit2, coef = i, number = filtSize,
                              adjust.method = "BH", sort.by = "B") # list of Data Frames
+  DEGs.limma[[i]] = appendAnnotation(DEGs.limma[[i]], annot, sort.by = "adj.P.Val")
 }
 
 # Save full DEG Tables
@@ -588,12 +732,7 @@ for (i in 1:length(myContr)) {
 }
 for (i in 1:length(myContr)) {
   if (saveOut & dim(all.limma.sigs[[i]])[1] > 0) {
-    if (append.annot) {
-      # To merge two data frames horizontally (right outer join)
-      joined = merge(annot, all.limma.sigs[[i]], by.x = "row.names", by.y = "row.names", all.y = TRUE)
-      rownames(joined) = joined[,1]
-      all.limma.sigs[[i]] = joined[,-1]
-    }
+    all.limma.sigs[[i]] = appendAnnotation(all.limma.sigs[[i]], annot, sort.by = "adj.P.Val")
     write.xlsx(all.limma.sigs[[i]], paste("Significant Genes by limma - ", myContr[i], ".xlsx", sep = ""),
                colNames = TRUE, rowNames = TRUE, sheetName = myContr[i],
                keepNA = TRUE, firstRow = TRUE) # Freezes the first row!
@@ -610,28 +749,28 @@ for (i in 1:length(myContr)) {
 # Find Axis Limits
 max.M.value = 0
 for (i in 1:length(myContr)) {
-  temp = max(abs(DEGs.limma[[i]][,1]))
+  temp = max(abs(DEGs.limma[[i]]$logFC))
   if (temp > max.M.value) {
     max.M.value = temp
   }
 }
 max.A.value = 0
 for (i in 1:length(myContr)) {
-  temp = max(DEGs.limma[[i]][,2])
+  temp = max(DEGs.limma[[i]]$AveExpr)
   if (temp > max.A.value) {
     max.A.value = temp
   }
 }
 min.A.value = Inf
 for (i in 1:length(myContr)) {
-  temp = min(DEGs.limma[[i]][,2])
+  temp = min(DEGs.limma[[i]]$AveExpr)
   if (temp < min.A.value) {
     min.A.value = temp
   }
 }
 min.P.value = 1
 for (i in 1:length(myContr)) {
-  temp = min(DEGs.limma[[i]][,4])
+  temp = min(DEGs.limma[[i]]$P.Value)
   if (temp < min.P.value) {
     min.P.value = temp
   }
@@ -650,21 +789,23 @@ for (i in 1:length(myContr)) {
   printPlots(paste("9 - MA-Plot with Limma DEGs ", myContr[i], sep = ""))
 }
 
-# Volcano Plots - from limma package
+# Volcano Plots
 for (i in 1:length(myContr)) {
   
-  tot.DEG = sum(DEGs.limma[[i]][,5] < 0.05) # Total number of significant DEGs (without any FC cutoff)
+  tot.DEG = sum(DEGs.limma[[i]]$adj.P.Val < 0.05) # Total number of significant DEGs (without any FC cutoff)
   high.DEG = min(c(5,tot.DEG)) # To highlight no more than 5 genes per plot
-  
-  volcanoplot(efit2, coef = i, style = "p-value",
-              highlight = high.DEG, names = rownames(dataset), hl.col = myColors[1],
-              xlim = c(-max.M.value, max.M.value), ylim = c(0, -log10(min.P.value)),
-              xlab = "log2-Fold-Change")
-  title(main = myContr[i])
   
   # Significance Threshold
   # Find that p-value corresponding to BH-adj.p-value ~ 0.05 (or Bonferroni point when tot.DEG = 0)
   thrP = (0.05/filtSize)*(tot.DEG + 1)
+  
+  # Alternative approach - Suitable also for correction methods other than BH
+  # WARNING: DEG list has to be sorted by p-value or B statistics!
+  #if (tot.DEG > 0) {
+  #  thrP = DEGs.limma[[i]][tot.DEG + 1, "P.Value"] # This is the p-value of the first non-DEG
+  #} else {
+  #  thrP = (0.05/filtSize) # Bonferroni point
+  #}
   
   # Check the threshold p-value
   cat("\n", myContr[i], " - Threshold Report:\n",
@@ -673,41 +814,53 @@ for (i in 1:length(myContr)) {
       "  -log10(p-value)    =  ", -log10(thrP), "\n",
       "  Gene Ranking       =  ", tot.DEG, ":", tot.DEG + 1, "\n\n", sep = "")
   
-  # Check in the DEG list
+  # Check within the DEG list - WARNING: DEG list has to be sorted by p-value or B statistics!
   # It should be the alpha-crossing-point for BH-adj.p-values column...
   # ...and a thrP-containing interval for un-adjusted p-values column.
   if (tot.DEG > 0) {
-    print(DEGs.limma[[i]][tot.DEG:(tot.DEG + 1),])
+    print(DEGs.limma[[i]][tot.DEG:(tot.DEG + 1), c("logFC","AveExpr","t","P.Value","adj.P.Val","B")])
     cat("\n")
   } else {
-    print(DEGs.limma[[i]][1,])
+    print(DEGs.limma[[i]][1, c("logFC","AveExpr","t","P.Value","adj.P.Val","B")])
     cat("\n")
   }
   
-  if (FALSE) {
-    # Alternative approach - Suitable also for correction methods other than BH
-    indexP = which.min(abs(DEGs.limma[[i]][,5] - 0.05)) # Find the gene with adj.p.value closest to 0.05
-    if (tot.DEG > 0) {
-      thrP = DEGs.limma[[i]][indexP,4] # This is the p-value of the last DEG (or first non-DEG)
-    } else {
-      thrP = (0.05/filtSize) # Bonferroni point
-    }
-    
-    # Check the threshold p-value
-    cat("\nThreshold Report:\n",
-        "-----------------\n",
-        "  p-value threshold  =  ", thrP, "\n",
-        "  -log10(p-value)    =  ", -log10(thrP), "\n",
-        "  Gene Ranking       =  ", indexP, "\n\n", sep = "")
-    
-    # Check in the DEG list
-    DEGs.limma[[i]][indexP:(tot.DEG + 1),]
+  # Enhanced Volcano Plot
+  if (append.annot) {
+    # Case-insensitive search of Gene Symbol column
+    myLabels = DEGs.limma[[i]][,grep("symbol",tolower(colnames(DEGs.limma[[i]])))]
+  } else {
+    myLabels = rownames(DEGs.limma[[i]])
   }
-  
-  abline(v = c(thrFC,-thrFC), col = myColors[2])
-  abline(h = -log10(thrP), col = myColors[2])
-  abline(h = -log10(0.05), col = myColors[2], lty = 2)
+  print( # NOTICE: When in a for loop, you have to explicitly print your resulting EnhancedVolcano object
+    EnhancedVolcano(DEGs.limma[[i]],
+                    x = "logFC",
+                    y = "P.Value",
+                    ylim = c(0, -log10(min.P.value)),
+                    pCutoff = thrP,
+                    FCcutoff = thrFC,
+                    pointSize = 1,
+                    col = c("black", "black", "black", myColors[2]),
+                    lab = myLabels,
+                    #selectLab = myLabels[1:high.DEG],
+                    labSize = 4,
+                    title = myContr[i],
+                    subtitle = "Limma",
+                    legendPosition = "none"))
   printPlots(paste("10 - Volcano with Limma DEGs ", myContr[i], sep = ""))
+  
+  if (FALSE) {
+    # Alternative Volcano Plot From limma package
+    volcanoplot(efit2, coef = i, style = "p-value",
+                highlight = high.DEG, names = rownames(dataset), hl.col = myColors[1],
+                xlim = c(-max.M.value, max.M.value), ylim = c(0, -log10(min.P.value)),
+                xlab = "log2-Fold-Change")
+    title(main = myContr[i])
+    abline(v = c(thrFC,-thrFC), col = myColors[2])
+    abline(h = -log10(thrP), col = myColors[2])
+    abline(h = -log10(0.05), col = myColors[2], lty = 2)
+    printPlots(paste("10 - Volcano with Limma DEGs ", myContr[i], sep = ""))
+  }
 }
 
 
@@ -735,10 +888,10 @@ for (i in 1:length(myContr)) {
   # invisible(capture.output()) is to suppress automatic output to console
   # WARNING: therein <- (instead of =) is mandatory for assignment!
   invisible(capture.output(RP.out <- RankProducts(sub.dataset, cl, gene.names = rownames(dataset),
-                                                 logged = TRUE, na.rm = FALSE, plot = FALSE, rand = 123)))
+                                                  logged = TRUE, na.rm = FALSE, plot = FALSE, rand = 123)))
   invisible(capture.output(plotRP(RP.out, cutoff = 0.05)))
   
-  # Compute full DEG Tables
+  # Compute full DEG Tables (returns a list of 2 matrices, not data frames)
   invisible(capture.output(DEGs.RP <- topGene(RP.out, logged = TRUE, logbase = 2, num.gene = filtSize)))
   for (j in 1:2) {
     DEGs.RP[[j]][,3] = log2(1/DEGs.RP[[j]][,3]) # Invert FC to get Case vs Ctrl and take the log2 values
@@ -771,16 +924,8 @@ for (i in 1:length(myContr)) {
   
   # Save significant DEG list in Excel format with annotations
   if (saveOut & (length(ups.Index) > 1 | length(dwn.Index) > 1)) {
-    
-    all.RP.sigs = rbind(DEGs.RP$Table1[ups.Index,], DEGs.RP$Table2[dwn.Index,]) # To join two data frames vertically
-    
-    if (append.annot) {
-      # To merge two data frames horizontally (right outer join)
-      joined = merge(annot, all.RP.sigs, by.x = "row.names", by.y = "row.names", all.y = TRUE)
-      rownames(joined) = joined[,1]
-      all.RP.sigs = joined[,-1]
-    }
-    
+    all.RP.sigs = rbind(DEGs.RP$Table1[ups.Index,], DEGs.RP$Table2[dwn.Index,]) # To join two objects vertically
+    all.RP.sigs = appendAnnotation(all.RP.sigs, annot, sort.by = "pfp")
     write.xlsx(all.RP.sigs, paste("Significant Genes by RP - ", myContr[i], ".xlsx", sep = ""),
                colNames = TRUE, rowNames = TRUE, sheetName = myContr[i],
                keepNA = TRUE, firstRow = TRUE) # Freezes the first row!
@@ -792,6 +937,95 @@ summary.RP = rbind(colSums(results.RP == -1), # Cast to matrix
                    colSums(results.RP == 1))
 rownames(summary.RP) = c("Down", "NotSig", "Up")
 summary.RP
+
+
+
+
+
+# RP Plot --------------------------------------------------------------------------------------------------------------
+# Volcano plot of the last contrast
+
+# NOTICE_1: While matrices are constrained to a single data type, data frames can feature columns of different types.
+# NOTICE_2: While duplicated row (and column) names are allowed in a matrix, they are not allowed in a data frame.
+# 
+# With these two points in mind, the following steps allow merging up- and down-RP DEGs in just one table,
+# retaining for each duplicate probe only the one with the lower p-value.
+
+dub.DEGs.RP = rbind(DEGs.RP[[1]], DEGs.RP[[2]]) # Join matrices vertically (duplicated row names allowed)
+probe.IDs = rownames(dub.DEGs.RP) # Store row names in a saving variable
+rownames(dub.DEGs.RP) = NULL # Remove row names from matrix (so it can be coerced to a data frame)
+dub.DEGs.RP = as.data.frame(dub.DEGs.RP) # Cast to data frame
+dub.DEGs.RP = cbind(probe.IDs, dub.DEGs.RP) # Reinsert Probe IDs as a standard entry (to be used as grouping variable)
+
+# Remove duplicates based on P.value column condition
+uni.DEGs.RP = dub.DEGs.RP[with(dub.DEGs.RP, ave(P.value, probe.IDs, FUN = min) == P.value),]
+# ...that is a more readable short expression for the extended:
+# uni.DEGs.RP = dub.DEGs.RP[ave(dub.DEGs.RP$P.value, dub.DEGs.RP$probe.IDs, FUN = min) == dub.DEGs.RP$P.value,]
+
+# Check for duplicates
+sum(duplicated(dub.DEGs.RP$probe.IDs)) # It must be dim(DEGs.RP[[i]])[1]
+sum(duplicated(uni.DEGs.RP$probe.IDs)) # It must be 0
+
+# Restore Probe_IDs as row names
+rownames(uni.DEGs.RP) = uni.DEGs.RP$probe.IDs
+uni.DEGs.RP = uni.DEGs.RP[,-1]
+
+# Append annotation and sort data frame by pfp (adj.p-value)
+uni.DEGs.RP = appendAnnotation(uni.DEGs.RP, annot, sort.by = "pfp")
+
+min.P.value = min(uni.DEGs.RP$P.value) # Find y-axis limit
+tot.DEG = sum(uni.DEGs.RP$pfp < 0.05) # Total number of significant DEGs (without any FC cutoff)
+high.DEG = min(c(5,tot.DEG)) # To highlight no more than 5 genes per plot
+
+# Significance Threshold
+# Find that p-value corresponding to BH-adj.p-value ~ 0.05 (or Bonferroni point when tot.DEG = 0)
+# WARNING: DEG list has to be sorted by p-value (or pfp)!
+if (tot.DEG > 0) {
+  thrP = uni.DEGs.RP[tot.DEG + 1, "P.value"] # This is the p-value of the first non-DEG
+} else {
+  thrP = (0.05/filtSize) # Bonferroni point
+}
+
+# Check the threshold p-value
+cat("\n", myContr[length(myContr)], " - Threshold Report:\n",
+    "--------------------------------------\n",
+    "  p-value threshold  =  ", thrP, "\n",
+    "  -log10(p-value)    =  ", -log10(thrP), "\n",
+    "  Gene Ranking       =  ", tot.DEG, ":", tot.DEG + 1, "\n\n", sep = "")
+
+# Check within the DEG list - WARNING: DEG list has to be sorted by p-value (or pfp)!
+# It should be the alpha-crossing-point for adj.p-values column
+if (tot.DEG > 0) {
+  print(uni.DEGs.RP[tot.DEG:(tot.DEG + 1), c("gene.index", "RP/Rsum", "Log2FC", "pfp", "P.value")])
+  cat("\n")
+} else {
+  print(uni.DEGs.RP[1, c("gene.index", "RP/Rsum", "Log2FC", "pfp", "P.value")])
+  cat("\n")
+}
+
+# Enhanced Volcano Plot
+if (append.annot) {
+  # Case-insensitive search of Gene Symbol column
+  myLabels = uni.DEGs.RP[,grep("symbol",tolower(colnames(uni.DEGs.RP)))]
+} else {
+  myLabels = rownames(uni.DEGs.RP)
+}
+print( # NOTICE: When in a for loop, you have to explicitly print your resulting EnhancedVolcano object
+  EnhancedVolcano(uni.DEGs.RP,
+                  x = "Log2FC",
+                  y = "P.value",
+                  ylim = c(0, -log10(min.P.value)),
+                  pCutoff = thrP,
+                  FCcutoff = thrFC,
+                  pointSize = 1,
+                  col = c("black", "black", "black", myColors[2]),
+                  lab = myLabels,
+                  #selectLab = myLabels[1:high.DEG],
+                  labSize = 4,
+                  title = myContr[length(myContr)],
+                  subtitle = "Rank Product",
+                  legendPosition = "none"))
+printPlots(paste("11 - Volcano with RP DEGs ", myContr[length(myContr)], sep = ""))
 
 
 
@@ -842,6 +1076,32 @@ for (i in 1:length(myContr)) {
     printPlots(paste("11 - Comparison Venn ", myContr[i], "_", strsplit(venn.sub, split = "-")[[1]][1], sep = ""))
   }
 }
+
+
+
+
+
+# Single Gene View -----------------------------------------------------------------------------------------------------
+# Plot single-gene comparison charts (boxes/bars and dots)
+
+# Character Vector containing the Probe_IDs of the genes of interest
+goi = c("201890_at",
+        "43427_at",
+        "205912_at",
+        "205043_at")
+
+# Plot single-gene data points
+singleGeneView(dataset, groups, design, goi, chart.type = "MS")
+
+# Provide a quantitative readout in console
+for (i in 1:length(goi)) {
+  cat("\nSummary Stats for Probe_ID: ", goi[i], "\n", sep = "")
+  print(descStat1G(dataset[goi[i],], groups, design))
+  cat("\n")
+}
+
+
+
 
 
 
