@@ -3,7 +3,7 @@
 # Affymetrix CEL files --to--> expression matrix
 # For Affymetrix 3'IVT and Gene/Exon ST Arrays
 #
-# a FeAR R-script - 28-Dec-2021
+# a FeAR R-script - 20-Jan-2022
 # 
 # Based on:
 # [1] "Homer MiniTutorial - Processing Affymetrix Gene Expression Arrays"
@@ -72,47 +72,21 @@ setwd(out.Dir)
 # Boolean flag to choose between remote and local database
 use.remote = TRUE
 
-platform = "hgu133a"
-# Choose among the following:
-# hgu133a                       Affymetrix Human Genome U133 A Set
-# hgu133b                       Affymetrix Human Genome U133 B Set
-# hgu133plus2                   Affymetrix Human Genome U133 Plus 2.0 Array
-# hugene10stprobeset            Affymetrix GeneChip Human Gene 1.0 ST Array
-#                                 ProbeSet Annotations -> Exon Level
-# hugene10sttranscriptcluster   Affymetrix GeneChip Human Gene 1.0 ST Array
-#                                 Transcript cluster Annotations-> Gene Level
-
-# Check Platform and set the exon.probes flag
-if (platform %in% c("hgu133a", "hgu133b", "hgu133plus2")) {
-  exon.probes = FALSE # Affy 3'IVT arrays
-} else if (platform %in% c("hugene10stprobeset", "hugene10sttranscriptcluster")) {
-  exon.probes = TRUE  # Affy ST arrays
-} else {
-  cat("\n")
-  stop("Invalid or unsupported platform\n\n")
-}
+# Number of MA-plots to be drawn for each Affymetrix.QC.Plots
+maplot.num = 4
 
 # Global options suitable for STALKER_Functions
 # Erase them by typing: options(scriptName = NULL, ...)
 options(scriptName = "CEL_2_Exprs",
         save.PNG.plot = TRUE,
         save.PDF.plot = FALSE,
-        append.annot = FALSE)
+        append.annot = TRUE)
 
 
 
 
 
 # * Load Packages --------------------------------------------------------------
-
-# Load Annotation Package
-if (getOption("append.annot") && use.remote) {
-  annot.db = paste0(platform, ".db")
-  # library() converts its argument into a string unless you specify
-  # the option character.only = TRUE
-  library(annot.db, character.only = TRUE)
-  cat("Loaded annotation: ", annot.db, "\n\n", sep = "")
-}
 
 library(oligo)  # For GeneChip/Exon Affymetrix Arrays
                 # AND most popular 3'IVT Affymetrix platforms
@@ -140,38 +114,22 @@ as.matrix(basename(celFiles))
 # This should also install-and-load the platform design package (e.g. pd.hg.u133a)
 affyRaw = read.celfiles(celFiles) # ExpressionFeatureSet data structure
 
-# Before-normalization quality control Boxplots
-set.seed(101) # For reproducibility, because oligo::boxplot methods use a sample
-              # of the probesets to produce the plot
-if (exon.probes) {
-  # For Gene ST and Exon ST arrays, oligo::boxplot() needs the 'target' option,
-  # when used with a FeatureSet-like object. 'target' argument can take one of
-  # the following values: "probeset", "core" (Gene/Exon), "full" (Exon),
-  # "extended" (Exon), describing the summarization target.
-  oligo::boxplot(affyRaw, target = "core", names = c(1:length(celFiles)),
-                 xlab = "Sample Index", main = "Unnormalized Expression",
-                 ylab = "log2(intensity)", transfo = log2) # Raw data to be logged
+# Check Platform and set the exon.probes flag
+platform <- affyRaw@annotation
+cat(paste0("\nDetected platform: ", platform, "\n\n"))
+if (platform %in% c("pd.hg.u133a", "pd.hg.u133b", "pd.hg.u133.plus.2",
+                    "pd.drosophila.2")) {
+  exon.probes = FALSE # Affy 3'IVT arrays
+  } else if (platform %in% c("pd.hugene.1.0.st.v1")) {
+  exon.probes = TRUE # Affy ST arrays
 } else {
-  oligo::boxplot(affyRaw, names = c(1:length(celFiles)), xlab = "Sample Index",
-                 main = "Unnormalized Expression", ylab = "log2(intensity)",
-                 transfo = log2) # Raw data to be logged
+  cat("\n")
+  stop("Invalid or unsupported platform\n\n")
 }
-printPlots("Boxplots - Pre-Norm")
 
-# Before-normalization quality control MA-plots
-n = 4                 # Number of samples to MA-plot
-m = length(celFiles)  # Total number of samples (i.e. expression matrix columns)
-# Sample subset by sampling n (out of m) chips
-if (n >= m) {
-  sample.index = round(seq(from = 1, to = m, length = m))
-} else {
-  sample.index = round(seq(from = 1, to = m, length = n))
-}
-# MAplot function returns 1 chip vs the pseudo-median reference chip
-for (i in sample.index) {
-  oligo::MAplot(affyRaw, which = i, pairs = FALSE)
-  printPlots(paste0("MA-Plot_", i, " - Pre-Norm"))
-}
+# Before-normalization quality control Boxplots
+Affymetrix.QC.Plots(affyRaw, exon.probes, "Pre-Norm", maplots = maplot.num,
+                    trans.func = log2)
 
 
 
@@ -193,17 +151,8 @@ expressionMatrix = exprs(eset)
 d = show.data(expressionMatrix)
 
 # After-normalization quality control Boxplots
-oligo::boxplot(eset, names = c(1:length(celFiles)), xlab = "Sample Index",
-               main = "RMA-Normalized Expression", ylab = "log2(intensity)",
-               transfo = identity) # Already logged (by RMA)
-printPlots("Boxplots - Post-Norm")
-
-# After-normalization quality control MA-plots
-# Single samples vs pseudo-median reference chip
-for (i in sample.index) {
-  oligo::MAplot(eset, which = i, pairs = FALSE)
-  printPlots(paste0("MA-Plot_", i, " - Post-Norm"))
-}
+Affymetrix.QC.Plots(eset, exon.probes, "Post-Norm", maplots = maplot.num,
+                    trans.func = identity)
 
 
 
@@ -240,8 +189,20 @@ any(is.nan(expressionMatrix))
 
 # Add Annotations --------------------------------------------------------------
 
+# Array platform for annotation
+platform.annot <- platform.selector("Affymetrix")
+
+# Load Annotation Package
+if (getOption("append.annot") && use.remote) {
+  annot.db = paste0(platform.annot, ".db")
+  # library() converts its argument into a string unless you specify
+  # the option character.only = TRUE
+  library(annot.db, character.only = TRUE)
+  cat("\nLoaded annotation: ", annot.db, "\n\n", sep = "")
+}
+
 if (getOption("append.annot")) {
-  annot = create.annot(platform, remote = use.remote)
+  annot = create.annot(platform.annot, remote = use.remote)
 } else {
   annot = NULL
   cat("\nNo annotation loaded\n\n", sep = "")
@@ -264,7 +225,7 @@ if (getOption("append.annot")) {
 
 myFrame = data.frame(expressionMatrix) # Matrix to data frame
 myFrame = appendAnnotation(myFrame, annot)
-show.data(myFrame)
+d = show.data(myFrame)
 
 # Count missing annotations in the actual expression matrix
 if (getOption("append.annot")) {
@@ -283,14 +244,14 @@ if (getOption("append.annot")) {
 
 # Without annotations
 write.csv(expressionMatrix, row.names = TRUE,
-          file = paste0("RMA-normalized_logExpression_", platform, ".csv"))
+          file = paste0("RMA-normalized_logExpression_", platform.annot, ".csv"))
 cat("\nExpression matrix--without annotations--has been saved as CSV file in\n",
     out.Dir, "\n\n", sep = "")
 
 # With annotations
 if (getOption("append.annot")) {
   write.csv(myFrame, row.names = TRUE,
-            file = paste0("RMA-normalized_logExpression_", platform, "_annotated.csv"))
+            file = paste0("RMA-normalized_logExpression_", platform.annot, "_annotated.csv"))
   cat("\nExpression matrix--with annotations--has been saved as CSV file in\n",
       out.Dir, "\n\n", sep = "")
 } else {

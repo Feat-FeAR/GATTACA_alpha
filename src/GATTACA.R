@@ -1,8 +1,8 @@
 # Header Info ----------------------------------------------------------------------------------------------------------
 #
-# GATTACA v0.2-alpha - General Algorithm for The Transcription Analysis by one-Channel Arrays
+# GATTACA v0.3-alpha - General Algorithm for The Transcription Analysis by one-Channel Arrays
 #
-# a FeAR R-script - 01-Feb-2021
+# a FeAR R-script - 11-Feb-2021
 #
 # Pipeline for one-Color (HD) Microarrays
 # Data are supposed to be already background-subtracted, log2-transformed, and interarray-normalized
@@ -34,7 +34,7 @@ library(ggplot2)          # Box Plot and Bar Chart with Jitter (already loaded b
 system.root = "D:\\UniUPO Drive\\" # SilverLife @ Home
 system.root = "D:\\Drive UniUPO\\" # SkyLake2   @ DBIOS
 
-# Affymetrix Human Genome U133 Set (A) remote annotation database (chip hgu133a) - [2475 missing GeneSymbols]
+# Affymetrix Human Genome U133 Set (A) - remote annotation database (chip hgu133a) - [2475 missing GeneSymbols]
 library(hgu133a.db)
 #hgu133a() # List of the available annotations
 annot = data.frame(Accession   = sapply(contents(hgu133aACCNUM), paste, collapse = ", "),
@@ -42,14 +42,14 @@ annot = data.frame(Accession   = sapply(contents(hgu133aACCNUM), paste, collapse
                    Description = sapply(contents(hgu133aGENENAME), paste, collapse = ", "))
 miss = sum(annot[,2] == "NA")
 
-# Affymetrix Human Genome U133 Set (A) local annotation database - [1228 missing GeneSymbols]
+# Affymetrix Human Genome U133 Set (A) - local annotation database - [1228 missing GeneSymbols]
 setwd(paste(system.root, "Coding\\R scripts\\Annotations\\HG-U133A-na36-annot-csv", sep = ""))
 annot = read.xlsx("HG-U133A.na36.annot.xlsx", colNames = TRUE, rowNames = TRUE, sep.names = "_") # As Data Frame
 #as.matrix(colnames(annot)) # List of the available annotations
 annot = annot[,c("Representative_Public_ID", "Gene_Symbol", "Gene_Title")]
 miss = sum(annot[,2] == "---")
 
-# Affymetrix Human Genome U133 Set (B) remote annotation database (chip hgu133b) - [7176 missing GeneSymbols]
+# Affymetrix Human Genome U133 Set (B) - remote annotation database (chip hgu133b) - [7176 missing GeneSymbols]
 library(hgu133b.db)
 #hgu133b() # List of the available annotations
 annot = data.frame(Accession   = sapply(contents(hgu133bACCNUM), paste, collapse = ", "),
@@ -57,14 +57,14 @@ annot = data.frame(Accession   = sapply(contents(hgu133bACCNUM), paste, collapse
                    Description = sapply(contents(hgu133bGENENAME), paste, collapse = ", "))
 miss = sum(annot[,2] == "NA")
 
-# Affymetrix Human Genome U133 Set (B) local annotation database - [5875 missing GeneSymbols]
+# Affymetrix Human Genome U133 Set (B) - local annotation database - [5875 missing GeneSymbols]
 setwd(paste(system.root, "Coding\\R scripts\\Annotations\\HG-U133B-na36-annot-csv", sep = ""))
 annot = read.xlsx("HG-U133B.na36.annot.xlsx", colNames = TRUE, rowNames = TRUE, sep.names = "_") # As Data Frame
 #as.matrix(colnames(annot)) # List of the available annotations
 annot = annot[,c("Representative_Public_ID", "Gene_Symbol", "Gene_Title")]
 miss = sum(annot[,2] == "---")
 
-# Affymetrix HG-U133 Plus 2.0 Array remote annotation database (chip hgu133plus2) - [12,770 missing GeneSymbols]
+# Affymetrix HG-U133 Plus 2.0 Array - remote annotation database (chip hgu133plus2) - [12,770 missing GeneSymbols]
 library(hgu133plus2.db)
 #hgu133plus2() # List of the available annotations
 annot = data.frame(Accession   = sapply(contents(hgu133plus2ACCNUM), paste, collapse = ", "),
@@ -72,14 +72,14 @@ annot = data.frame(Accession   = sapply(contents(hgu133plus2ACCNUM), paste, coll
                    Description = sapply(contents(hgu133plus2GENENAME), paste, collapse = ", "))
 miss = sum(annot[,2] == "NA")
 
-# Affymetrix HG-U133 Plus 2.0 Array local annotation database - [9619 missing GeneSymbols]
+# Affymetrix HG-U133 Plus 2.0 Array - local annotation database - [9619 missing GeneSymbols]
 setwd(paste(system.root, "Coding\\R scripts\\Annotations\\HG-U133_Plus_2-na36-annot-csv", sep = ""))
 annot = read.xlsx("HG-U133_Plus_2.na36.annot.xlsx", colNames = TRUE, rowNames = TRUE, sep.names = "_") # As Data Frame
 #as.matrix(colnames(annot)) # List of the available annotations
 annot = annot[,c("Representative_Public_ID", "Gene_Symbol", "Gene_Title")]
 miss = sum(annot[,2] == "---")
 
-# Agilent SurePrint G3 Mouse GE 8x60K local annotation database - [21865 missing GeneSymbols]
+# Agilent-028005 SurePrint G3 Mouse GE 8x60K - local annotation database - [21865 missing GeneSymbols]
 setwd(paste(system.root, "Coding\\R scripts\\Annotations\\AllAnnotations - Agilent Update 2018", sep = ""))
 annot = read.xlsx("028005_D_AA_20181026.xlsx", colNames = TRUE, rowNames = TRUE, sep.names = "_") # As Data Frame
 #as.matrix(colnames(annot)) # List of the available annotations
@@ -743,6 +743,69 @@ for (i in 1:length(myContr)) {
 
 
 
+# DE by Limma - Paired -------------------------------------------------------------------------------------------------
+# Differential Expression Assessment in Paired-Sample Design (just for two groups)
+
+patient.ID = factor(c(1:35,1:35))
+cond = factor(groups[design])
+
+limmaDesign = model.matrix(~patient.ID + cond)
+
+fit = lmFit(dataset, limmaDesign)
+efit2 = eBayes(fit)
+
+# Print Results (Top-Ten genes)
+cat("\nDEG Top-List for contrast: ", myContr[1], "\n", sep = "")
+topTable(efit2, coef = "condPDAC", adjust.method = "BH", sort.by = "B") # just on-Screen
+
+# Compute full DEG Tables
+DEGs.limma = list() # Create an empty list (for compatibility with independent-sample test)
+DEGs.limma[[1]] = topTable(efit2, coef = "condPDAC", number = filtSize,
+                           adjust.method = "BH", sort.by = "B") # list of Data Frames
+DEGs.limma[[1]] = appendAnnotation(DEGs.limma[[1]], annot, sort.by = "adj.P.Val")
+
+# Save full DEG Tables
+if (saveOut) {
+  degTabName = paste("Limma - DEG Table ", myContr[1], " - Paired.txt", sep = "")
+  write.table(DEGs.limma[[1]], degTabName, sep = "\t", col.names = TRUE, row.names = TRUE, quote = FALSE)
+  cat("\n'", degTabName, "' has been saved in ", myFolder, "\n\n", sep = "")
+}
+
+# Summary of DEGs for paired test ...to be implemented)
+
+# Show Hyperparameters
+d0 = efit2$df.prior           # prior degrees of freedom
+dg = mean(fit$df.residual)    # original degrees of freedom
+hyp = cbind(c(efit2$s2.prior, # prior variance
+      mean(fit$sigma^2),      # mean sample residual variance
+      mean(efit2$s2.post),    # mean posterior residual variance
+      d0, dg, d0/(d0+dg)))    # Shrinkage degree
+rownames(hyp) = c("Prior Var",
+                  "Sample Residual Mean Var",
+                  "Posterior Residual Mean Var",
+                  "Prior df",
+                  "Original df",
+                  "Shrinkage degree")
+colnames(hyp) = "Hyperparameters"
+hyp
+
+# Save significant DEG list in Excel format with annotations
+all.limma.sigs = list() # Create an empty list
+all.limma.sigs[[1]] = topTable(efit2, coef = "condPDAC", number = filtSize,
+                               adjust.method = "BH", sort.by = "B",
+                               p.value = 0.05, lfc = thrFC) # list of Data Frames
+
+if (saveOut & dim(all.limma.sigs[[1]])[1] > 0) {
+  all.limma.sigs[[1]] = appendAnnotation(all.limma.sigs[[1]], annot, sort.by = "adj.P.Val")
+  write.xlsx(all.limma.sigs[[1]], paste("Significant Genes by limma - ", myContr[1], " - Paired.xlsx", sep = ""),
+             colNames = TRUE, rowNames = TRUE, sheetName = myContr[1],
+             keepNA = TRUE, firstRow = TRUE) # Freezes the first row!
+}
+
+
+
+
+
 # Limma Plot -----------------------------------------------------------------------------------------------------------
 # MA-Plots with significant DEGs and Volcano plots
 
@@ -1073,7 +1136,7 @@ for (i in 1:length(myContr)) {
     # Create a new canvas and draw the Venn
     grid.newpage()
     grid.draw(venn.plot)
-    printPlots(paste("11 - Comparison Venn ", myContr[i], "_", strsplit(venn.sub, split = "-")[[1]][1], sep = ""))
+    printPlots(paste("12 - Comparison Venn ", myContr[i], "_", strsplit(venn.sub, split = "-")[[1]][1], sep = ""))
   }
 }
 
