@@ -1,8 +1,8 @@
 # Header Info ----------------------------------------------------------------------------------------------------------
 #
-# GATTACA v0.6-alpha - General Algorithm for The Transcriptional Analysis by one-Channel Arrays
+# GATTACA v0.7-alpha - General Algorithm for The Transcriptional Analysis by one-Channel Arrays
 #
-# a FeAR R-script - 25-Mar-2021
+# a FeAR R-script - 19-May-2021
 #
 # Pipeline for one-Color (HD) Microarrays
 # Data are supposed to be already background-subtracted, log2-transformed, and interarray-normalized
@@ -23,84 +23,91 @@ library(RankProd)         # Rank Product Method for Differential Expression
 library(VennDiagram)      # Venn Diagrams
 library(openxlsx)         # Reading, Writing, and Editing of .xlsx (Excel) Files
 library(EnhancedVolcano)  # Volcano Plots
+library(gplots)           # Heatmap with extensions - heatmap.2() 
 library(ggplot2)          # Box Plot and Bar Chart with Jitter (already loaded by PCAtools)
+library(RColorBrewer)     # Color Palette for R - display.brewer.all()
 
 
 
 
 
 # Prepare Annotations --------------------------------------------------------------------------------------------------
+# Choose your platform!
 
-system.root = "D:\\UniUPO Drive\\" # SilverLife @ Home
-system.root = "D:\\Drive UniUPO\\" # SkyLake2   @ DBIOS
+system.root = "D:\\Dropbox\\"
+system.root = "D:\\UniTo Drive\\"
 
-# Affymetrix Human Genome U133 Set (A) - remote annotation database (chip hgu133a) - [2475 missing GeneSymbols]
-library(hgu133a.db)
-#hgu133a() # List of the available annotations
-annot = data.frame(Accession   = sapply(contents(hgu133aACCNUM), paste, collapse = ", "),
-                   GeneSymbol  = sapply(contents(hgu133aSYMBOL), paste, collapse = ", "),
-                   Description = sapply(contents(hgu133aGENENAME), paste, collapse = ", "))
-miss = sum(annot[,2] == "NA")
+# Affymetrix Human Genome U133 Set (A)
+      # Remote annotation database (chip hgu133a) - [2475 missing GeneSymbols]
+      library(hgu133a.db)
+      #hgu133a() # List of available annotations
+      annot = data.frame(Accession   = sapply(contents(hgu133aACCNUM), paste, collapse = ", "),
+                         GeneSymbol  = sapply(contents(hgu133aSYMBOL), paste, collapse = ", "),
+                         Description = sapply(contents(hgu133aGENENAME), paste, collapse = ", "))
+      miss = sum(annot[,2] == "NA")
+      
+      # Local annotation database - [1228 missing GeneSymbols]
+      setwd(paste(system.root, "Coding\\R scripts\\Annotations\\HG-U133A-na36-annot-csv", sep = ""))
+      annot = read.xlsx("HG-U133A.na36.annot.xlsx", colNames = TRUE, rowNames = TRUE, sep.names = "_") # As Data Frame
+      #as.matrix(colnames(annot)) # List of available annotations
+      annot = annot[,c("Representative_Public_ID", "Gene_Symbol", "Gene_Title")]
+      miss = sum(annot[,2] == "---")
 
-# Affymetrix Human Genome U133 Set (A) - local annotation database - [1228 missing GeneSymbols]
-setwd(paste(system.root, "Coding\\R scripts\\Annotations\\HG-U133A-na36-annot-csv", sep = ""))
-annot = read.xlsx("HG-U133A.na36.annot.xlsx", colNames = TRUE, rowNames = TRUE, sep.names = "_") # As Data Frame
-#as.matrix(colnames(annot)) # List of the available annotations
-annot = annot[,c("Representative_Public_ID", "Gene_Symbol", "Gene_Title")]
-miss = sum(annot[,2] == "---")
+# Affymetrix Human Genome U133 Set (B)
+      # Remote annotation database (chip hgu133b) - [7176 missing GeneSymbols]
+      library(hgu133b.db)
+      #hgu133b() # List of available annotations
+      annot = data.frame(Accession   = sapply(contents(hgu133bACCNUM), paste, collapse = ", "),
+                         GeneSymbol  = sapply(contents(hgu133bSYMBOL), paste, collapse = ", "),
+                         Description = sapply(contents(hgu133bGENENAME), paste, collapse = ", "))
+      miss = sum(annot[,2] == "NA")
+      
+      # Local annotation database - [5875 missing GeneSymbols]
+      setwd(paste(system.root, "Coding\\R scripts\\Annotations\\HG-U133B-na36-annot-csv", sep = ""))
+      annot = read.xlsx("HG-U133B.na36.annot.xlsx", colNames = TRUE, rowNames = TRUE, sep.names = "_") # As Data Frame
+      #as.matrix(colnames(annot)) # List of available annotations
+      annot = annot[,c("Representative_Public_ID", "Gene_Symbol", "Gene_Title")]
+      miss = sum(annot[,2] == "---")
 
-# Affymetrix Human Genome U133 Set (B) - remote annotation database (chip hgu133b) - [7176 missing GeneSymbols]
-library(hgu133b.db)
-#hgu133b() # List of the available annotations
-annot = data.frame(Accession   = sapply(contents(hgu133bACCNUM), paste, collapse = ", "),
-                   GeneSymbol  = sapply(contents(hgu133bSYMBOL), paste, collapse = ", "),
-                   Description = sapply(contents(hgu133bGENENAME), paste, collapse = ", "))
-miss = sum(annot[,2] == "NA")
+# Affymetrix Human Genome HG-U133 Plus 2.0 Array
+      # Remote annotation database (chip hgu133plus2) - [12,770 missing GeneSymbols]
+      library(hgu133plus2.db)
+      #hgu133plus2() # List of available annotations
+      annot = data.frame(Accession   = sapply(contents(hgu133plus2ACCNUM), paste, collapse = ", "),
+                         GeneSymbol  = sapply(contents(hgu133plus2SYMBOL), paste, collapse = ", "),
+                         Description = sapply(contents(hgu133plus2GENENAME), paste, collapse = ", "))
+      miss = sum(annot[,2] == "NA")
+      
+      # Local annotation database - [9619 missing GeneSymbols]
+      setwd(paste(system.root, "Coding\\R scripts\\Annotations\\HG-U133_Plus_2-na36-annot-csv", sep = ""))
+      annot = read.xlsx("HG-U133_Plus_2.na36.annot.xlsx", colNames = TRUE, rowNames = TRUE, sep.names = "_") # As Data Frame
+      #as.matrix(colnames(annot)) # List of available annotations
+      annot = annot[,c("Representative_Public_ID", "Gene_Symbol", "Gene_Title")]
+      miss = sum(annot[,2] == "---")
 
-# Affymetrix Human Genome U133 Set (B) - local annotation database - [5875 missing GeneSymbols]
-setwd(paste(system.root, "Coding\\R scripts\\Annotations\\HG-U133B-na36-annot-csv", sep = ""))
-annot = read.xlsx("HG-U133B.na36.annot.xlsx", colNames = TRUE, rowNames = TRUE, sep.names = "_") # As Data Frame
-#as.matrix(colnames(annot)) # List of the available annotations
-annot = annot[,c("Representative_Public_ID", "Gene_Symbol", "Gene_Title")]
-miss = sum(annot[,2] == "---")
-
-# Affymetrix HG-U133 Plus 2.0 Array - remote annotation database (chip hgu133plus2) - [12,770 missing GeneSymbols]
-library(hgu133plus2.db)
-#hgu133plus2() # List of the available annotations
-annot = data.frame(Accession   = sapply(contents(hgu133plus2ACCNUM), paste, collapse = ", "),
-                   GeneSymbol  = sapply(contents(hgu133plus2SYMBOL), paste, collapse = ", "),
-                   Description = sapply(contents(hgu133plus2GENENAME), paste, collapse = ", "))
-miss = sum(annot[,2] == "NA")
-
-# Affymetrix HG-U133 Plus 2.0 Array - local annotation database - [9619 missing GeneSymbols]
-setwd(paste(system.root, "Coding\\R scripts\\Annotations\\HG-U133_Plus_2-na36-annot-csv", sep = ""))
-annot = read.xlsx("HG-U133_Plus_2.na36.annot.xlsx", colNames = TRUE, rowNames = TRUE, sep.names = "_") # As Data Frame
-#as.matrix(colnames(annot)) # List of the available annotations
-annot = annot[,c("Representative_Public_ID", "Gene_Symbol", "Gene_Title")]
-miss = sum(annot[,2] == "---")
-
-# Agilent-028005 SurePrint G3 Mouse GE 8x60K - local annotation database - [21865 missing GeneSymbols]
-setwd(paste(system.root, "Coding\\R scripts\\Annotations\\Agilent-028005_SurePrintG3MouseGE8x60K", sep = ""))
-annot = read.xlsx("028005_D_AA_20181026.xlsx", colNames = TRUE, rowNames = TRUE, sep.names = "_") # As Data Frame
-#as.matrix(colnames(annot)) # List of the available annotations
-annot = annot[,c("GeneSymbol", "GeneName", "Description")]
-miss = sum(is.na(annot[,1]))
+# Agilent-028005 SurePrint G3 Mouse GE 8x60K
+      # Local annotation database - [21865 missing GeneSymbols]
+      setwd(paste(system.root, "Coding\\R scripts\\Annotations\\Agilent-028005_SurePrintG3MouseGE8x60K", sep = ""))
+      annot = read.xlsx("028005_D_AA_20181026.xlsx", colNames = TRUE, rowNames = TRUE, sep.names = "_") # As Data Frame
+      #as.matrix(colnames(annot)) # List of available annotations
+      annot = annot[,c("GeneSymbol", "GeneName", "Description")]
+      miss = sum(is.na(annot[,1]))
 
 # Agilent-026652 Whole Human Genome Microarray 4x44K v2
-# remote annotation database (chip HsAgilentDesign026652) - [6076 missing GeneSymbols]
-library(HsAgilentDesign026652.db)
-#HsAgilentDesign026652() # List of the available annotations
-annot = data.frame(Accession   = sapply(contents(HsAgilentDesign026652ACCNUM), paste, collapse = ", "),
-                   GeneSymbol  = sapply(contents(HsAgilentDesign026652SYMBOL), paste, collapse = ", "),
-                   Description = sapply(contents(HsAgilentDesign026652GENENAME), paste, collapse = ", "))
-miss = sum(annot[,2] == "NA")
-
-# Agilent-026652 Whole Human Genome Microarray 4x44K v2 - local annotation database - [7035 missing GeneSymbols]
-setwd(paste(system.root, "Coding\\R scripts\\Annotations\\Agilent-026652_WholeHumanGenome4x44Kv2", sep = ""))
-annot = read.xlsx("GPL13497_noParents.an.xlsx", colNames = TRUE, rowNames = TRUE, sep.names = "_") # As Data Frame
-as.matrix(colnames(annot)) # List of the available annotations
-annot = annot[,c("GeneSymbols", "GeneNames")]
-miss = sum(is.na(annot[,1]))
+      # Remote annotation database (chip HsAgilentDesign026652) - [6076 missing GeneSymbols]
+      library(HsAgilentDesign026652.db)
+      #HsAgilentDesign026652() # List of available annotations
+      annot = data.frame(Accession   = sapply(contents(HsAgilentDesign026652ACCNUM), paste, collapse = ", "),
+                         GeneSymbol  = sapply(contents(HsAgilentDesign026652SYMBOL), paste, collapse = ", "),
+                         Description = sapply(contents(HsAgilentDesign026652GENENAME), paste, collapse = ", "))
+      miss = sum(annot[,2] == "NA")
+      
+      # Local annotation database - [7035 missing GeneSymbols]
+      setwd(paste(system.root, "Coding\\R scripts\\Annotations\\Agilent-026652_WholeHumanGenome4x44Kv2", sep = ""))
+      annot = read.xlsx("GPL13497_noParents.an.xlsx", colNames = TRUE, rowNames = TRUE, sep.names = "_") # As Data Frame
+      as.matrix(colnames(annot)) # List of available annotations
+      annot = annot[,c("GeneSymbols", "GeneNames")]
+      miss = sum(is.na(annot[,1]))
 
 cat("\n", miss, " unannotated genes (", round(miss/dim(annot)[1]*1e2, digits = 2), " %) \n\n", sep = "")
 
@@ -111,10 +118,8 @@ cat("\n", miss, " unannotated genes (", round(miss/dim(annot)[1]*1e2, digits = 2
 # * Variable Definition ------------------------------------------------------------------------------------------------
 # User-Defined Experiment-Specific Variables
 
-myFolder = "D:\\Dropbox\\temp for today"
-myFolder = paste(system.root, "WORKS\\202x - Article - Colon\\Data\\1 - Raw Data", sep = "")
-myFile = "1 - log_Intensity_matrix_Organized_all.txt"
-myFile = "Large Expression Matrix - PostNormJoin.txt"
+myFolder = paste(system.root, "WORKS\\0010 - Ongoing\\target_path", sep = "")
+myFile = "Expression_Matrix_FileName.txt"
 
 rowOffset = 1    # Row offset (rows to skip, including the header)
 colWithNames = 1 # Column containing (unique) gene identifiers
@@ -135,11 +140,11 @@ if (length(myColors) < length(groups)) {
 
 # Filter: log2-expression conventional threshold (to be checked from case to case)
 # Agilent
-# Check the un-hybridized (-)3xSLv1 NegativeControl probe as a plausible value:
-# e.g. mean(as.numeric(dataset["(-)3xSLv1",])))
-thr0 = 6
+    # Check the un-hybridized (-)3xSLv1 NegativeControl probe as a plausible value:
+    # e.g. mean(as.numeric(dataset["(-)3xSLv1",])))
+    thr0 = 6
 # Affymetrix
-thr0 = 4
+    thr0 = 4
 
 # Fold Change Threshold. Usually, |log2FC|>0.5 OR |log2FC|>1
 thrFC = 0.5
@@ -325,6 +330,10 @@ header  = header[,(colOffset+1):d[2]]
 d = dim(dataset)
 cat("\nFinal dataset dimensions:", d, "\n\n", sep = " ")
 dataset[1:10,1:5]
+
+# NOTICE:
+# The rows of the final expression matrix could be 1 more than annot matrix rows in case of Agilent arrays
+# because of the presence of the NegativeControl probe (-)3xSLv1
 
 
 
@@ -1323,7 +1332,46 @@ for (i in 1:length(goi)) {
 
 
 
+# P2RX Focus --- TO BE CORRECTED and GENERALIZED
 
+# In case of limma
+for (i in 0:8) { # 0 and 8 are just "negative controls"
+  cat(paste("P2RX", i, " probed: ", sep = ""))
+  if (length(grep(paste("P2RX", i, sep = ""), annot[,"Gene_Symbol"])) != 0) {
+    cat("YES\n")
+  } else {
+    cat("NO\n")
+  }
+}
+
+i = 1
+P2X.table = DEGs.limma[[i]][grep("P2RX", DEGs.limma[[i]][,"Gene_Symbol"]),]
+P2X.table
+
+write.xlsx(P2X.table, paste("P2RX panel - ", myContr[i], ".xlsx", sep = ""),
+           colNames = TRUE, rowNames = TRUE, sheetName = myContr[i],
+           keepNA = TRUE, firstRow = TRUE) # Freezes the first row!
+
+
+
+# In case of RP
+for (i in 0:8) { # 0 and 8 are just "negative controls"
+  cat(paste("P2RX", i, " probed: ", sep = ""))
+  if (length(grep(paste("P2RX", i, sep = ""), annot[,"GeneSymbol"])) != 0) {
+    cat("YES\n")
+  } else {
+    cat("NO\n")
+  }
+}
+
+for (i in 1:2) {
+  DEGs.RP.annot = appendAnnotation(DEGs.RP[[i]], annot, sort.by = "pfp")
+  P2X.table = DEGs.RP.annot[grep("P2RX", DEGs.RP.annot[,"GeneSymbol"]),]
+  print(P2X.table)
+  write.xlsx(P2X.table, paste("P2RX panel_", i, ".xlsx", sep = ""),
+             colNames = TRUE, rowNames = TRUE, sheetName = myContr,
+             keepNA = TRUE, firstRow = TRUE) # Freezes the first row!
+}
 
 
 
