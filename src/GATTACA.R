@@ -1,11 +1,21 @@
 # Header Info ----------------------------------------------------------------------------------------------------------
 #
-# GATTACA v0.7-alpha - General Algorithm for The Transcriptional Analysis by one-Channel Arrays
+# GATTACA v0.8-alpha - General Algorithm for The Transcriptional Analysis by one-Channel Arrays
 #
-# a FeAR R-script - 19-May-2021
+# a FeAR R-script - 04-Aug-2021
 #
-# Pipeline for one-Color (HD) Microarrays
+# A Pipeline for one-Color (HD) Microarrays
 # Data are supposed to be already background-subtracted, log2-transformed, and interarray-normalized
+#
+# NOTICE
+#   This is the first version of GATTACA sourcing user-defined functions from outside: source("STALKER_Functions.R")
+#   This GATTACA script was used to build the first GitHub release (GATTACA v0.0.0-beta).
+#   GitHub repository:
+#
+#      https://github.com/Feat-FeAR/GATTACA
+#
+#   This way, GATTACA will become part of the larger STALKER collaborative project,
+#   which is intended to provide general tools for omics (not only for microarrays).
 #
 
 
@@ -13,6 +23,7 @@
 
 
 # * Package Loading ----------------------------------------------------------------------------------------------------
+# Load required packages and source external scripts
 
 library(preprocessCore)   # Interarray Normalization by Quantile-Quantile Algorithm
 library(rafalib)          # Bland Altman Plots (aka MA Plots)
@@ -27,6 +38,8 @@ library(gplots)           # Heatmap with extensions - heatmap.2()
 library(ggplot2)          # Box Plot and Bar Chart with Jitter (already loaded by PCAtools)
 library(RColorBrewer)     # Color Palette for R - display.brewer.all()
 
+source("STALKER_Functions.R")   # Collection of custom functions
+
 
 
 
@@ -34,8 +47,9 @@ library(RColorBrewer)     # Color Palette for R - display.brewer.all()
 # Prepare Annotations --------------------------------------------------------------------------------------------------
 # Choose your platform!
 
-system.root = "D:\\Dropbox\\"
-system.root = "D:\\UniTo Drive\\"
+system.root = "E:\\UniTo Drive\\"            # SilverLife @ Home
+system.root = "D:\\UniTo Drive\\"            # SkyLake @ DBIOS
+system.root = "C:\\Users\\aleph\\OneDrive\\" # SurfaceFeAR
 
 # Affymetrix Human Genome U133 Set (A)
       # Remote annotation database (chip hgu133a) - [2475 missing GeneSymbols]
@@ -118,12 +132,12 @@ cat("\n", miss, " unannotated genes (", round(miss/dim(annot)[1]*1e2, digits = 2
 # * Variable Definition ------------------------------------------------------------------------------------------------
 # User-Defined Experiment-Specific Variables
 
-myFolder = paste(system.root, "WORKS\\0010 - Ongoing\\target_path", sep = "")
+myFolder = paste0(system.root, "WORKS\\0010 - Ongoing\\target_path")
 myFile = "Expression_Matrix_FileName.txt"
 
-rowOffset = 1    # Row offset (rows to skip, including the header)
-colWithNames = 1 # Column containing (unique) gene identifiers
-colOffset = 1    # Column offset (columns to skip, including row names)
+rowOffset = 1 # Row offset, including the header (How many rows above the first number?)
+colWithID = 1 # Column containing (unique) gene identifiers
+colOffset = 2 # Column offset, including row names (How many columns before the first number?)
 
 groups = c("WT","Ab","AbFK","TG","TGFK") # Experimental Design - Group Names (start with control condition)
 design = c(5,5,5,5,4) # Experimental Design - Ordered Group Size (compact Design Mode)
@@ -149,155 +163,24 @@ if (length(myColors) < length(groups)) {
 # Fold Change Threshold. Usually, |log2FC|>0.5 OR |log2FC|>1
 thrFC = 0.5
 
-# If-statement control flags
+# Flags for script-wide IF
 saveOut = TRUE
 logConversion = FALSE
 secondNorm = FALSE
-save.PNG.plot = TRUE
-save.PDF.plot = FALSE
-append.annot = TRUE
-if (append.annot) {
+
+# Global options suitable for STALKER_Functions
+# Erase them by typing: options(scriptName = NULL, ...)
+options(scriptName = "GATTACA",
+        save.PNG.plot = TRUE,
+        save.PDF.plot = FALSE,
+        append.annot = TRUE)
+
+if (getOption("append.annot")) {
   dim.annot = dim(annot) # If 'annot' is not defined an error message will be displayed
   cat("\nA ", dim.annot[1], " x ", dim.annot[2], " annotation dataframe has been loaded\n\n", sep = "")
 } else {
   annot = NULL
   cat("\nNo annotation loaded\n\n", sep = "")
-}
-
-
-
-
-
-# * Function Definition ------------------------------------------------------------------------------------------------
-# User-Defined Functions
-
-# Save a graphical output to 'GATTACA Figures' sub-directory
-#   figureName  = output file name (without extension)
-#   PNG.bool    = T to print the currently displayed figure in PNG format
-#   PDF.bool    = T to print the currently displayed figure in PDF format
-printPlots = function(figureName, PNG.bool = save.PNG.plot, PDF.bool = save.PDF.plot)
-{
-  figSubFolder = "GATTACA Figures"
-  fullName = file.path(figSubFolder, figureName, fsep = .Platform$file.sep) # OS-independent path separator
-  
-  if (!file.exists(figSubFolder) & (PNG.bool | PDF.bool)) {
-    dir.create(figSubFolder)
-    cat("\nNew folder '", figSubFolder, "' has been created in the PWD...\n\n", sep = "")
-  }
-  if (PNG.bool) { # invisible(capture.output()) to suppress automatic output to console
-    invisible(capture.output(
-      dev.print(device = png, filename = paste(fullName, ".png", sep = ""), width = 820, height = 600)))
-  }
-  if (PDF.bool) {
-    invisible(capture.output(
-      dev.print(device = pdf, paste(fullName, ".pdf", sep = ""))))
-  }
-}
-
-# Append annotation to DEG statistics top-table (do nothing if append.annot = FALSE)
-#   gene.stat   = the table of genes, usually a DEG summary-statistics top-table (or an expression matrix)
-#   ann         = the matrix containing the annotation data
-#   do.the.job  = F to skip the appending task within a script
-#   sort.by     = the name or index of the column used to sort the final data set
-appendAnnotation = function(gene.stat, ann, do.the.job = append.annot, sort.by = 1)
-{
-  if (do.the.job) {
-    # 'merge' function to merge two matrix-like objects horizontally and cast to data frame (right outer join)
-    # NOTICE: both gene.stat and ann are supposed to have the Probe_IDs as rownames
-    joined = merge(ann, gene.stat, by.x = "row.names", by.y = "row.names", all.y = TRUE)
-    rownames(joined) = joined[,1]
-    gene.stat = joined[,-1]
-  }
-  
-  # Re-sort the data frame by the content of 'sort.by' column ('sort.by' can be either a number or a column name)
-  gene.stat = gene.stat[order(gene.stat[,sort.by]),]
-    
-  return(gene.stat)
-}
-
-# Return basics descriptive statistics of a single gene, by group label
-#   gene  = Numeric vector or single-row data frame from gene expression matrix
-#   gr    = Group names
-#   des   = Experimental design (full design mode vector)
-descStat1G = function(gene, gr, des)
-{
-  # Define a new empty data frame
-  stat.frame = data.frame(GROUP = character(),
-                          n = integer(),
-                          MEAN = double(),
-                          VAR = double(),
-                          SD = double(),
-                          SEM = double(),
-                          stringsAsFactors = FALSE)
-  
-  for (i in 1:length(gr)) {
-    
-    n.gene = as.numeric(gene[des == i]) # Downcast to numeric vector
-    
-    stat.frame[i,1] = gr[i]
-    stat.frame[i,2] = sum(des == i)
-    stat.frame[i,3] = mean(n.gene)
-    stat.frame[i,4] = var(n.gene)
-    stat.frame[i,5] = sd(n.gene)
-    stat.frame[i,6] = sd(n.gene)/sqrt(sum(des == i)) # SEM
-  }
-  
-  return(stat.frame)
-}
-
-# Plot single gene comparison chart
-#   exp.mat     = Expression matrix (as data frame)
-#   gr          = Group names
-#   des         = Experimental design (full design mode vector)
-#   gois        = Genes of interest by probe (char vector)
-#   chart.type  = "BP" (Box Plot), "BC" (Bar Chart), or "MS" (Mean & SEM)
-singleGeneView = function(exp.mat, gr, des, gois, chart.type = "BP")
-{
-  geo = switch(chart.type,
-               "BP" = "point",
-               "BC" = "bar",
-               "MS" = "crossbar")
-  
-  for (i in 1:length(gois)) {
-    
-    var.expr = as.numeric(exp.mat[gois[i],]) # Downcast to vector
-    var.groups = gr[des]
-    sgex = data.frame(var.expr, var.groups) # Single Gene Expression Data Frame
-    sgs = descStat1G(exp.mat[gois[i],], gr, des) # Single Gene Summary Data Frame
-    
-    if (chart.type == "BP") {
-      
-      print( # NOTICE: When in a for loop, you have to explicitly print your resulting ggplot object
-        ggplot(data = sgex, aes(var.groups, var.expr)) +
-          theme_bw(base_size = 15, base_rect_size = 1.5) +
-          xlab("Group") + # In the following functions, when data=NULL (default), the data is inherited from ggplot()
-          ylab("log2 Expression") +
-          ggtitle(label = "Box Plot with Jitter", subtitle = paste("Probe ID: ", gois[i], sep = "")) +
-          geom_boxplot(width = 0.5, size = 0.5, notch = TRUE, outlier.shape = NA) +
-          stat_summary(fun = "mean", geom = geo, color = "red3", size = 2) +
-          geom_jitter(position = position_jitter(width = 0.1, height = 0, seed = 123), size = 1.5))
-      
-    } else if (chart.type == "BC" | chart.type == "MS") {
-      
-      print(
-        ggplot(data = sgex, aes(var.groups, var.expr)) +
-          theme_bw(base_size = 15, base_rect_size = 1.5) +
-          xlab("Group") +
-          ylab("log2 Expression") +
-          ggtitle(label = "Box Plot with Jitter", subtitle = paste("Probe ID: ", gois[i], sep = "")) +
-          stat_summary(fun = "mean", geom = geo, color = "black", size = 0.5, width = 0.2) +
-          # Recommended alternative for bar charts in ggplot2:
-          #geom_bar(data = sgs, aes(GROUP, MEAN), stat = "identity", color = "black", size = 0.5, width = 0.2) +
-          geom_errorbar(data = sgs, aes(GROUP, MEAN, ymin = MEAN - SEM, ymax = MEAN + SEM), size = 1, width = 0.1) + 
-          geom_jitter(position = position_jitter(width = 0.1, height = 0, seed = 123), size = 1.5))
-      
-    } else {
-      
-      cat("\n")
-      stop("Invalid chart.type!\n\n")
-      
-    }
-  }
 }
 
 
@@ -324,7 +207,7 @@ cat("\nHeaded dataset dimensions:", d, "\n\n", sep = " ")
 dataset[1:10,1:5]
 
 # Extract row names (gene identifiers)
-rownames(dataset) = dataset[,colWithNames]
+rownames(dataset) = dataset[,colWithID]
 dataset = dataset[,(colOffset+1):d[2]]
 header  = header[,(colOffset+1):d[2]]
 d = dim(dataset)
@@ -495,7 +378,7 @@ for (i in 1:(m-1)) { # All the possible combinations of two groups
 # Sample-wise Hierarchical Clustering for Batch-Effect Detection
 
 # Matrix Transpose t() is used because dist() computes the distances between the ROWS of a matrix
-sampleDist = dist(t(dataset), method = "euclidean") # Distance matrix (NOTE: t(dataset) is coerced to matrix)
+sampleDist = dist(t(dataset), method = "euclidean") # Distance matrix (NOTE: t(dataset) is coerced to matrix) --- TRY Manhattan: more robust
 hc = hclust(sampleDist, method = "ward.D")
 plot(hc) # Display Dendrogram
 printPlots("4 - Dendrogram")
@@ -695,7 +578,7 @@ myContr = as.matrix(myContr) # Cast to matrix
 rownames(myContr) = c(1:length(myContr))
 myContr
 # Modify here to retain (and reorder) just the contrasts of interest
-myContr = as.matrix(myContr[c(3,6,1,2),])
+myContr = as.matrix(myContr[c(1,6,3),])
 rownames(myContr) = c(1:length(myContr))
 myContr
 
@@ -952,7 +835,7 @@ for (i in 1:length(myContr)) {
   }
   
   # Enhanced Volcano Plot
-  if (append.annot) {
+  if (getOption("append.annot")) {
     # Case-insensitive search of Gene Symbol column
     myLabels = DEGs.limma[[i]][,grep("symbol",tolower(colnames(DEGs.limma[[i]])))]
   } else {
@@ -1234,7 +1117,7 @@ if (tot.DEG > 0) {
 }
 
 # Enhanced Volcano Plot
-if (append.annot) {
+if (getOption("append.annot")) {
   # Case-insensitive search of Gene Symbol column
   myLabels = uni.DEGs.RP[,grep("symbol",tolower(colnames(uni.DEGs.RP)))]
 } else {
@@ -1312,27 +1195,68 @@ for (i in 1:length(myContr)) {
 
 
 # Single Gene View -----------------------------------------------------------------------------------------------------
-# Plot single-gene comparison charts (boxes/bars and dots)
+# Plot single-gene comparison charts (boxes/bars and jitter dots)
 
 # Character Vector containing the Probe_IDs of the genes of interest
-goi = c("201890_at",
-        "43427_at",
-        "205912_at",
-        "205043_at")
+goi = c("A_51_P309854",
+        "A_55_P2130129",
+        "A_51_P506733",
+        "A_55_P2007243")
 
 # Plot single-gene data points
-singleGeneView(dataset, groups, design, goi, chart.type = "MS")
+ct = "MS"
+if (getOption("append.annot")) {
+  singleGeneView(dataset, groups, design, goi, chart.type = ct, ann = annot)
+} else {
+  singleGeneView(dataset, groups, design, goi, chart.type = ct)
+}
 
 # Provide a quantitative readout in console
 for (i in 1:length(goi)) {
-  cat("\nSummary Stats for Probe_ID: ", goi[i], "\n", sep = "")
-  print(descStat1G(dataset[goi[i],], groups, design))
-  cat("\n")
+  
+  # Prepare
+  geneStats.tit = paste("\nSingle-Gene Summary Statistics",
+                        "\n==============================\n", sep = "")
+  if (getOption("append.annot")) {
+    geneStats.head = paste("\nProbe_ID:\t", goi[i], "\n",
+                          "Gene Symbol:\t", annot[goi[i], grepl("Symbol", colnames(annot))], "\n",
+                          "Gene Name:\t", annot[goi[i], grepl("Name", colnames(annot))], "\n", sep = "")
+  } else {
+    geneStats.head = paste("\nProbe_ID:\t", goi[i], "\n", sep = "")
+  }
+  geneStats.num = descStat1G(dataset[goi[i],], groups, design, 4)
+  
+  # Print on screen
+  if (i == 1) cat(geneStats.tit, "\n", sep = "") # One-line IF
+  cat(geneStats.head, "\n", sep = "")
+  print(geneStats.num)
+  cat("\n\n")
+  
+  # Print on file
+  if (saveOut) {
+    if (i == 1) write(geneStats.tit, "Single Gene Stats.txt") # One-line IF
+    write(geneStats.head, "Single Gene Stats.txt", append = TRUE)
+    
+    suppressWarnings(write.table(geneStats.num, "Single Gene Stats.txt", append = TRUE, quote = FALSE,
+                                 row.names = TRUE, col.names = TRUE, sep = "\t"))
+    write("\n", "Single Gene Stats.txt", append = TRUE)
+  }
 }
 
 
 
+
+
+
+
+
+####
+#
 # P2RX Focus --- TO BE CORRECTED and GENERALIZED
+#  - usare grepl per "Symbol" come sopra
+#  - inserire un IF nel caso di assenza di annotazioni
+#
+####
 
 # In case of limma
 for (i in 0:8) { # 0 and 8 are just "negative controls"
