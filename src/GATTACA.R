@@ -1,9 +1,9 @@
 # Header Info ------------------------------------------------------------------
 #
-# GATTACA v0.9-alpha
+# GATTACA v1.0-alpha
 # General Algorithm for The Transcriptional Analysis by one-Channel Arrays
 #
-# a FeAR R-script - 11-Jan-2022
+# a FeAR R-script - 19-Jan-2022
 #
 # Pipeline for one-Color (HD) Microarrays
 # Data are supposed to be already background-subtracted, log2-transformed, and
@@ -130,16 +130,7 @@ options(scriptName = "GATTACA",
 saveOut = TRUE
 secondNorm = FALSE
 use.remote = TRUE
-platform = "hugene10sttranscriptcluster"
-# Choose among the following:
-# hgu133a                       Affymetrix Human Genome U133 A Set
-# hgu133b                       Affymetrix Human Genome U133 B Set
-# hgu133plus2                   Affymetrix Human Genome U133 Plus 2.0 Array
-# hugene10stprobeset            Affymetrix GeneChip Human Gene 1.0 ST Array
-#                                 ProbeSet Annotations -> Exon Level
-# hugene10sttranscriptcluster   Affymetrix GeneChip Human Gene 1.0 ST Array
-#                                 Transcript cluster Annotations-> Gene Level
-# HsAgilentDesign026652         Agilent-026652 Whole Human Genome Microarray 4x44K v2
+platform = array_platform_selector()
 
 
 
