@@ -190,7 +190,7 @@ any(is.nan(expressionMatrix))
 # Add Annotations --------------------------------------------------------------
 
 # Array platform for annotation
-platform.annot <- platform.selector("Affymetrix")
+platform.annot <- array_platform_selector("Affymetrix")
 
 # Load Annotation Package
 if (getOption("append.annot") && use.remote) {
