@@ -2,16 +2,16 @@
 #
 # Agilent TXT raw data --to--> expression matrix
 #
-# a FeAR R-script - 27-Jan-2023
+# a FeAR R-script - 31-Jan-2023
 #
 # NOTE
-# read.maimages() function from limma requires as its first argument a data frame
-# containing (at least) a column called 'FileName' with the names of the raw-data
-# files to be used for the analysis. For Agilent arrays such a list is usually
-# given in the form of a tab-delimited file named "Targets.txt", possibly
-# containing other kind of information about the experimental design. However,
-# this script ignores any Targets.txt file found within the input directory and
-# builds its own target list run-time.
+# read.maimages() function from limma requires as its first argument a data
+# frame containing (at least) a column named `FileName` with the names of the
+# raw-data files to be used for the analysis. For Agilent arrays such a list is
+# usually providedin the form of a tab-delimited file named "Targets.txt",
+# possibly containing other kind of information about the experimental design.
+# However, this script ignores any Targets.txt file found within the input
+# directory and builds its own target list run-time.
 #
 # Script outline:
 #   - Raw data loading
@@ -56,9 +56,6 @@ setwd(out.Dir)
 
 # ** Variable Definition -------------------------------------------------------
 
-# Boolean flag to choose between remote and local database
-use.remote <- TRUE
-
 # Number of MA-plots to be drawn for each Agilent.QC.Plots
 maplot.num <- 8
 
@@ -67,7 +64,7 @@ maplot.num <- 8
 options(scriptName = "TXT_2_Exprs",
         save.PNG.plot = TRUE,
         save.PDF.plot = FALSE,
-        append.annot = FALSE)
+        append.annot = TRUE)
 
 
 
@@ -75,25 +72,13 @@ options(scriptName = "TXT_2_Exprs",
 
 # * Load Packages --------------------------------------------------------------
 
-# Load Annotation Package
-if (getOption("append.annot") && use.remote) {
-  annot.db <- paste0(platform, ".db")
-  # library() converts its argument into a string unless you specify
-  # the option character.only = TRUE
-  library(annot.db, character.only = TRUE)
-  cat("Loaded annotation: ", annot.db, "\n\n", sep = "")
-}
-
-library(limma)      # Empirical Bayes Method for Differential Expression
-                    # here used for low-level analysis only
-
 # Collection of custom functions
 # NOTE: This way of sourcing only works within RStudio !!
 GATTACA.dir <- dirname(rstudioapi::getSourceEditorContext()$path)
 source(file.path(GATTACA.dir, "STALKER_Functions.R", fsep = .Platform$file.sep))
 
-# Array platform
-platform <- array_platform_selector("Agilent")
+library(limma)      # Empirical Bayes Method for Differential Expression
+                    # here used for low-level analysis only
 
 
 
@@ -114,7 +99,9 @@ targets
 
 # Convert the data to an EListRaw object (data object for single-channel arrays)
 # Specify green.only=TRUE for one-channel data and retain information about
-# background via gIsWellAboveBG
+# background via gIsWellAboveBG. Note that the `source` argument of
+# `read.maimages()` refers to the name of the image analysis software used to
+# quantify the probe intensities, not the name of the microarray manufacturer!
 raw <- read.maimages(targets, source = 'agilent.median', green.only = TRUE,
                      other.columns = 'gIsWellAboveBG')
 
@@ -209,7 +196,7 @@ raw_BGandNormalized_filt <- raw_BGandNormalized[!ctrlProbes & isExpr, ]
 # Probe Summarization: replace values of replicate probes with their mean
 # Probe_IDs are used to identify the replicates and then assigned to row names
 raw_BGandNormalized_filt_mean <- avereps(raw_BGandNormalized_filt,
-                                        ID = raw_BGandNormalized_filt$genes$ProbeName)
+                                         ID = raw_BGandNormalized_filt$genes$ProbeName)
 pre <- dim(raw_BGandNormalized_filt)
 post <- dim(raw_BGandNormalized_filt_mean)
 cat("\n", (pre - post)[1], " replicate probes have been averaged\n\n", sep = "")
@@ -223,27 +210,26 @@ d <- show_data(expressionMatrix)
 
 # Add Annotations --------------------------------------------------------------
 
+# Array platform
+platform <- array_platform_selector("Agilent")
+
 if (getOption("append.annot")) {
-  annot <- create.annot(platform, remote = use.remote)
+  
+  annot <- array_create_annot(platform, collapsing = TRUE)
+  # NOTE: To use a local annotation file use the legacy function below
+  # annot <- create.annot(platform, remote = FALSE)
+  
+  row.names(annot) <- annot[,1]
+  annot <- annot[,-1]
+  show_data(annot)
+
 } else {
   annot <- NULL
   cat("\nNo annotation loaded\n\n", sep = "")
 }
 
 # Count missing annotations in the complete db
-if (getOption("append.annot")) {
-  
-  if (use.remote) {naSymb = "NA"} else {naSymb = "---"}
-  
-  nc <- dim(annot)[2]
-  notMap <- matrix(0, nrow = 2, ncol = nc,
-                  dimnames = list(c("Not Mapped","%"), colnames(annot)))
-  for (i in 1:nc) {
-    notMap[1,i] <- length(which(annot[,i] == naSymb))
-    notMap[2,i] <- round(notMap[1,i]/dim(annot)[1]*1e2, digits = 2)
-  }
-  notMap
-}
+if (getOption("append.annot")) {missing_report(annot)}
 
 myFrame <- data.frame(expressionMatrix) # Matrix to data frame
 myFrame <- appendAnnotation(myFrame, annot)
@@ -251,13 +237,7 @@ myFrame <- appendAnnotation(myFrame, annot)
 d <- show_data(myFrame)
 
 # Count missing annotations in the actual expression matrix
-if (getOption("append.annot")) {
-  for (i in 1:nc) {
-    notMap[1,i] <- length(which(myFrame[,i] == naSymb))
-    notMap[2,i] <- round(notMap[1,i]/dim(myFrame)[1]*1e2, digits = 2)
-  }
-  notMap
-}
+if (getOption("append.annot")) {missing_report(myFrame)}
 
 
 
@@ -281,6 +261,3 @@ if (getOption("append.annot")) {
   cat("\nNo annotation loaded",
       "\nExpression matrix with annotations cannot be saved\n\n", sep = "")
 }
-
-
-

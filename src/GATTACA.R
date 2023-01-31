@@ -129,8 +129,7 @@ options(scriptName = "GATTACA",
 # Flags for script-wide IF structures
 saveOut = TRUE
 secondNorm = FALSE
-use.remote = TRUE
-platform = array_platform_selector()
+platform <- array_platform_selector() # Array platform
 
 
 
@@ -140,26 +139,23 @@ platform = array_platform_selector()
 # Load annotation file when append.annot = TRUE
 
 if (getOption("append.annot")) {
-  annot = create.annot(platform, remote = use.remote)
+  
+  annot <- array_create_annot(platform, collapsing = TRUE)
+  # NOTE: To use a local annotation file use the legacy function below
+  # annot <- create.annot(platform, remote = FALSE)
+  
+  # For compatibility with appendAnnotation()
+  row.names(annot) <- annot[,1]
+  annot <- annot[,-1]
+  show_data(annot)
+  
 } else {
-  annot = NULL
+  annot <- NULL
   cat("\nNo annotation loaded\n\n", sep = "")
 }
 
 # Count missing annotations in the complete db
-if (getOption("append.annot")) {
-  
-  if (use.remote) {naSymb = "NA"} else {naSymb = "---"}
-  
-  nc = dim(annot)[2]
-  notMap = matrix(0, nrow = 2, ncol = nc,
-                  dimnames = list(c("Not Mapped","%"), colnames(annot)))
-  for (i in 1:nc) {
-    notMap[1,i] = length(which(annot[,i] == naSymb))
-    notMap[2,i] = round(notMap[1,i]/dim(annot)[1]*1e2, digits = 2)
-  }
-  notMap
-}
+if (getOption("append.annot")) {missing_report(annot)}
 
 
 

@@ -66,7 +66,7 @@ setwd(out.Dir)
 
 
 
-
+## RE-IMPLEMENT ANNOTATION-RELATED FEATURES AS IN AGILENT!! 
 # ** Variable Definition -------------------------------------------------------
 
 # Boolean flag to choose between remote and local database
