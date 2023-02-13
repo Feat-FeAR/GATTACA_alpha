@@ -36,7 +36,10 @@ library(gplots)           # Heatmap with extensions - heatmap.2()
 library(ggplot2)          # Charts with Jitter (already loaded by PCAtools)
 library(RColorBrewer)     # Color Palette for R - display.brewer.all()
 
-# Collection of custom functions
+# CMA tools general functions
+library(cmatools)
+
+# GATTACA special functions
 # NOTE: This way of sourcing only works within RStudio !!
 GATTACA.dir = dirname(rstudioapi::getSourceEditorContext()$path)
 source(file.path(GATTACA.dir, "STALKER_Functions.R", fsep = .Platform$file.sep))
@@ -147,7 +150,7 @@ if (getOption("append.annot")) {
   # For compatibility with appendAnnotation()
   row.names(annot) <- annot[,1]
   annot <- annot[,-1]
-  show_data(annot)
+  lms(annot)
   
 } else {
   annot <- NULL
@@ -166,7 +169,8 @@ if (getOption("append.annot")) {missing_report(annot)}
 
 # Read raw data
 dataset = read.table(myFile, header = FALSE, sep = ",", dec = ".")
-d = show_data(dataset)
+lms(dataset)
+d <- dim(dataset)
 
 # Extract column headings (sample identifiers)
 header  = read.table(myFile, nrows = 1, header = FALSE, sep = ",",
@@ -174,14 +178,15 @@ header  = read.table(myFile, nrows = 1, header = FALSE, sep = ",",
 dataset = read.table(myFile, skip = rowOffset, header = FALSE, sep = ",",
                      dec = ".")
 colnames(dataset) = unlist(header)
-d = show_data(dataset)
+lms(dataset)
+d <- dim(dataset)
 
 # Extract row names (gene identifiers)
 rownames(dataset) = dataset[,colWithID]
 dataset = dataset[,(colOffset+1):d[2]]
 header  = header[,(colOffset+1):d[2]]
-d = show_data(dataset)
-
+lms(dataset)
+d <- dim(dataset)
 
 
 
@@ -231,7 +236,8 @@ if (saveOut) {
 }
 
 colnames(dataset) = sampleName
-d = show_data(dataset)
+lms(dataset)
+d <- dim(dataset)
 
 
 
